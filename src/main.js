@@ -1034,6 +1034,7 @@ const SWEEP_PERIOD = 5 * 60 * 1000;
 const SWEEP_JITTER = 0.2;
 const TICK_MS = 8000;
 let quotaDue = {};
+let startupEnrolled = false;
 let ticking = false;
 
 function scheduleNext(id, base = Date.now()) {
@@ -1042,7 +1043,10 @@ function scheduleNext(id, base = Date.now()) {
 }
 function enrollAccounts() {
   const live = new Set((state?.accounts || []).map((a) => a.id));
-  for (const id of live) if (!(id in quotaDue)) quotaDue[id] = Date.now();
+  // 启动首轮：除非设置里开启「启动时刷新全部账号」，否则不立即刷新，按常规周期排队
+  const lazy = !startupEnrolled && !state?.refresh_on_start;
+  for (const id of live) if (!(id in quotaDue)) { if (lazy) scheduleNext(id); else quotaDue[id] = Date.now(); }
+  if (state) startupEnrolled = true;
   for (const id of Object.keys(quotaDue)) if (!live.has(id)) delete quotaDue[id];
 }
 function pokeAccount(id) { if (id) quotaDue[id] = Date.now(); }

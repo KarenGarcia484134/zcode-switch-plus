@@ -1014,6 +1014,7 @@ async fn set_behavior(
     close_to_tray: Option<bool>,
     hot_switch: Option<bool>,
     auto_claim: Option<bool>,
+    refresh_on_start: Option<bool>,
 ) -> Result<(), String> {
     let _guard = store_guard();
     let paths = Paths::detect();
@@ -1029,6 +1030,9 @@ async fn set_behavior(
     }
     if let Some(v) = auto_claim {
         s.auto_claim = Some(v);
+    }
+    if let Some(v) = refresh_on_start {
+        s.refresh_on_start = Some(v);
     }
     let r = save_settings(&paths, &s);
     rebuild_tray(&app);

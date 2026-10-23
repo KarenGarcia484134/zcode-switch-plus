@@ -227,4 +227,6 @@ export const zh = {
   "stat.claimableSub": "活动套餐",
   "stat.alert": "额度告急",
   "stat.alertSub": "任一窗口 ≥90%",
+  "s.refreshOnStart": "启动时刷新全部账号",
+  "s.refreshOnStartDesc": "开启后程序启动时立即逐个刷新所有账号额度；关闭时按 5 分钟周期慢慢刷新（默认关闭）",
 };

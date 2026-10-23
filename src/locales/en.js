@@ -227,4 +227,6 @@ export const en = {
   "stat.claimableSub": "campaign plans",
   "stat.alert": "Low quota",
   "stat.alertSub": "any window ≥90%",
+  "s.refreshOnStart": "Refresh all accounts on startup",
+  "s.refreshOnStartDesc": "Refresh every account's quota right after launch; when off, accounts refresh on the normal 5-minute cycle (default off)",
 };

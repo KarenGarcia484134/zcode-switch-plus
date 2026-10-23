@@ -58,6 +58,7 @@ const actions = {
         launchAfterSwitch: key === "launch" ? !state.launch_after_switch : null,
         closeToTray: key === "tray" ? !state.close_to_tray : null,
         hotSwitch: key === "hot" ? !state.hot_switch : null,
+        refreshOnStart: key === "rstart" ? !state.refresh_on_start : null,
       });
       await refresh(); render();
       toast(t("s.savedToast"));
@@ -178,6 +179,7 @@ function render() {
       ${toggle(s.launch_after_switch, "actions.toggleBehavior('launch')", t("s.launchAfter"), t("s.launchAfterDesc"))}
       ${toggle(s.close_to_tray, "actions.toggleBehavior('tray')", t("s.closeTray"), t("s.closeTrayDesc"))}
       ${toggle(s.hot_switch, "actions.toggleBehavior('hot')", t("s.hotSwitch"), t("s.hotSwitchDesc"))}
+      ${toggle(s.refresh_on_start, "actions.toggleBehavior('rstart')", t("s.refreshOnStart"), t("s.refreshOnStartDesc"))}
       <label style="margin-top:14px">${t("s.authLabel")}</label>
       ${toggle(s.auth_proxy_on, "actions.toggleAuthProxy()", t("s.proxyToggle"), t("s.proxyToggleDesc"))}
       <div class="path-line" style="margin-top:6px">

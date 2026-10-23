@@ -142,6 +142,9 @@ pub struct Settings {
     pub language: Option<String>,
     #[serde(default)]
     pub auto_claim: Option<bool>,
+    /// 启动时是否立即刷新全部账号额度（默认关闭）
+    #[serde(default)]
+    pub refresh_on_start: Option<bool>,
 }
 
 impl Settings {
@@ -149,6 +152,7 @@ impl Settings {
     pub fn close_to_tray(&self) -> bool { self.close_to_tray.unwrap_or(true) }
     pub fn hot_switch(&self) -> bool { self.hot_switch.unwrap_or(false) }
     pub fn auto_claim(&self) -> bool { self.auto_claim.unwrap_or(false) }
+    pub fn refresh_on_start(&self) -> bool { self.refresh_on_start.unwrap_or(false) }
     pub fn auth_proxy(&self) -> Option<&str> {
         if self.auth_proxy_on.unwrap_or(false) {
             self.auth_proxy_url.as_deref().map(str::trim).filter(|s| !s.is_empty())
@@ -187,6 +191,7 @@ pub struct AppState {
     pub close_to_tray: bool,
     pub hot_switch: bool,
     pub auto_claim: bool,
+    pub refresh_on_start: bool,
     pub auth_proxy_on: bool,
     pub auth_proxy_url: Option<String>,
     pub language: String,
@@ -1518,6 +1523,7 @@ pub fn get_state(paths: &Paths) -> Result<AppState, String> {
         close_to_tray: settings.close_to_tray(),
         hot_switch: settings.hot_switch(),
         auto_claim: settings.auto_claim(),
+        refresh_on_start: settings.refresh_on_start(),
         auth_proxy_on: settings.auth_proxy_on.unwrap_or(false),
         auth_proxy_url: settings.auth_proxy_url.clone(),
         language: crate::i18n::current().as_str().to_string(),
