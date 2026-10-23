@@ -12,6 +12,7 @@ let appVer = "";
 let acctQuota = {};
 let claimable = {};
 let claimAllRunning = false;
+let elig = {};
 const REFRESH_CLAIM_COOLDOWN_MS = 60_000;
 let refreshClaim = { running: false, done: 0, total: 0, cooldownUntil: 0 };
 let refreshTicker = null;
@@ -415,6 +416,59 @@ const actions = {
     toast(t("m.refreshClaimDone", { n: ids.length, k: okCount }), "ok");
   },
 
+  async checkOne(id) {
+    const name = accountName(id);
+    if (elig[id]?.busy) return;
+    if (refreshClaim.running || claimAllRunning || claimActive) { toast(t("m.claimBusy"), "warn"); return; }
+    const left = (elig[id]?.cooldownUntil || 0) - Date.now();
+    if (left > 0) { toast(t("btn.checkOneCooldown", { n: Math.ceil(left / 1000) }), "warn"); return; }
+    elig[id] = { busy: true };
+    claimable[id] = { plans: claimable[id]?.plans || [], busy: true };
+    if (!uiLocked()) render();
+    try {
+      const r = await invoke("claim_refresh", { id });
+      const plans = r.plans || [];
+      claimable[id] = { plans, err: null, busy: false };
+      if (plans.length) {
+        const names = plans.map((p) => p.name || p.plan_id).join("、");
+        elig[id] = { kind: "ok", text: t("m.eligOk", { plans: names }) };
+        toast(t("m.eligOkToast", { name }), "ok", names);
+      } else {
+        elig[id] = { kind: "none", text: t("m.eligNone") };
+        toast(t("m.eligNoneToast", { name }), "warn");
+      }
+      if (r.activationError) {
+        elig[id] = { kind: "err", text: t("m.eligErr", { err: stripErr(r.activationError) }) };
+      }
+    } catch (e) {
+      claimable[id] = { plans: claimable[id]?.plans || [], err: String(e), busy: false };
+      elig[id] = { kind: "err", text: t("m.eligErr", { err: stripErr(e) }) };
+      toast(t("m.refreshClaimAcctErr", { name, err: stripErr(e) }), "err");
+    }
+    elig[id].at = Date.now();
+    elig[id].cooldownUntil = Date.now() + 15_000;
+    loadAcctQuota(id);
+    if (!uiLocked()) render();
+  },
+
+  async copy(id, kind) {
+    const a = state?.accounts.find((x) => x.id === id);
+    let text = "";
+    try {
+      if (kind === "email") text = a?.identity?.email || "";
+      else if (kind === "uid") text = a?.identity?.user_id || "";
+      else text = await invoke("account_secret", { id, kind });
+      if (!text) throw t("m.copyEmpty");
+      try { await navigator.clipboard.writeText(text); }
+      catch {
+        const ta = document.createElement("textarea");
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        document.execCommand("copy"); ta.remove();
+      }
+      toast(t("m.copied", { what: t(`btn.copy.${kind}`) }), "ok");
+    } catch (e) { toast(stripErr(e), "err"); }
+  },
+
   async toggleAutoClaim() {
     if (autoToggleBusy) return;
     const next = !state.auto_claim;
@@ -737,6 +791,37 @@ function restoreScroll(cap) {
   }
 }
 
+function provTag(a) {
+  const p = a.identity?.provider || "";
+  if (p === "bigmodel") return `<span class="tag-prov">${t("tag.cn")}</span>`;
+  if (p === "zai") return `<span class="tag-prov intl">${t("tag.intl")}</span>`;
+  return "";
+}
+
+function quotaAlertCount(accounts) {
+  let n = 0;
+  for (const a of accounts) {
+    const d = acctQuota[a.id]?.data;
+    if (!d) continue;
+    const items = [...(d.items || []), ...(d.plans || []).flatMap((p) => p.items || [])];
+    if (items.some((it) => it.percent_used != null && it.percent_used >= 90)) n++;
+  }
+  return n;
+}
+
+function statsHtml(s, claimableCount) {
+  const alerts = quotaAlertCount(s.accounts);
+  const card = (icon, cls, k, v, sub) => `
+    <div class="stat"><div class="stat-ic ${cls}">${ic(icon, 17)}</div>
+      <div class="stat-txt"><div class="stat-k">${k}</div><div class="stat-v">${v}</div><div class="stat-s" title="${esc(sub)}">${esc(sub)}</div></div></div>`;
+  return `<section class="stats">
+    ${card("userPlus", "", t("stat.total"), s.accounts.length, t("stat.totalSub"))}
+    ${card("power", s.zcode_running ? "run" : "off", t("stat.zcode"), s.zcode_running ? t("stat.running") : t("stat.stopped"), t("stat.zcodeSub"))}
+    ${card("gift", claimableCount ? "" : "zero", t("stat.claimable"), claimableCount, t("stat.claimableSub"))}
+    ${card("alert", alerts ? "warn" : "zero", t("stat.alert"), alerts, t("stat.alertSub"))}
+  </section>`;
+}
+
 function render() {
   const scrollCap = captureScroll();
   if (!state) {
@@ -784,10 +869,18 @@ function render() {
       <div class="row-top">
         <span class="notch" style="background:${notchColor(a.id)}"></span>
         <div class="row-main">
-          <div class="row-name">${esc(a.name)}${tierBadgeFor(a.id)}${isActive ? `<span class="tag-use">${t("btn.inUse")}</span>` : ""}${a.has_user_info === false ? `<span class="tag-relogin" title="${esc(t("btn.reloginTitle"))}">${t("btn.relogin")}</span>` : ""}${a.jwt_expired ? `<span class="tag-relogin" title="${esc(t("btn.jwtExpiredTitle"))}">${t("btn.jwtExpired")}</span>` : ""}</div>
+          <div class="row-name">${esc(a.name)}${provTag(a)}${tierBadgeFor(a.id)}${isActive ? `<span class="tag-use">${t("btn.inUse")}</span>` : ""}${a.has_user_info === false ? `<span class="tag-relogin" title="${esc(t("btn.reloginTitle"))}">${t("btn.relogin")}</span>` : ""}${a.jwt_expired ? `<span class="tag-relogin" title="${esc(t("btn.jwtExpiredTitle"))}">${t("btn.jwtExpired")}</span>` : ""}</div>
           <div class="row-meta">${meta}</div>
+          <div class="copy-row">
+            <span class="copy-chip" click="actions.copy('${a.id}','apikey')">⧉ ${t("btn.copy.apikey")}</span>
+            <span class="copy-chip" click="actions.copy('${a.id}','jwt')">⧉ ${t("btn.copy.jwt")}</span>
+            ${a.identity?.email ? `<span class="copy-chip" click="actions.copy('${a.id}','email')">⧉ ${t("btn.copy.email")}</span>` : ""}
+            ${a.identity?.user_id ? `<span class="copy-chip" click="actions.copy('${a.id}','uid')">⧉ ${t("btn.copy.uid")}</span>` : ""}
+          </div>
+          ${elig[a.id]?.text ? `<div class="elig ${elig[a.id].kind}">${esc(elig[a.id].text)}</div>` : ""}
         </div>
         <div class="row-actions">
+          <button class="icon-btn${elig[a.id]?.busy ? " spin" : ""}" title="${t("btn.checkOne")}" aria-label="${t("btn.checkOne")}" click="actions.checkOne('${a.id}')" ${elig[a.id]?.busy ? "disabled" : ""}>${ic("refresh", 16)}</button>
           <button class="icon-btn" title="${t("btn.quota")}" aria-label="${t("btn.quota")}" click="actions.acctQuota('${a.id}')">${ic("gauge", 16)}</button>
           <button class="icon-btn" title="${t("btn.rename")}" aria-label="${t("btn.rename")}" click="actions.rename('${a.id}')">${ic("pen", 16)}</button>
           <button class="icon-btn" title="${t("btn.export")}" aria-label="${t("btn.export")}" click="actions.exportOne('${a.id}')">${ic("export", 16)}</button>
@@ -819,6 +912,8 @@ function render() {
         <span class="status-text">${esc(statusText)}</span>
       </div>
     </header>
+
+    ${statsHtml(s, claimableCount)}
 
     <section class="toolbar">
       <button class="btn-primary has-ic${unsaved ? " attention" : ""}" click="actions.capture()" ${!s.live_logged_in || active ? "disabled" : ""}

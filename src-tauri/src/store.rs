@@ -1523,3 +1523,22 @@ pub fn get_state(paths: &Paths) -> Result<AppState, String> {
         language: crate::i18n::current().as_str().to_string(),
     })
 }
+
+/// 读取账号的敏感字段（供 UI「复制 JWT / API Key」使用）。
+pub fn account_secret(paths: &Paths, id: &str, kind: &str) -> Result<String, String> {
+    let acc = load_account(paths, id)?;
+    let out = match kind {
+        "jwt" => cred_plain(&acc.credentials, "zcodejwttoken", &paths.home),
+        "apikey" => acc.config.as_ref().and_then(|c| {
+            let provs = c.get("provider")?.as_object()?;
+            // 优先 Coding Plan 的 key，其次任一非空 apiKey
+            let pick = |v: &Value| v.pointer("/options/apiKey").and_then(|k| k.as_str()).map(str::trim)
+                .filter(|s| !s.is_empty()).map(String::from);
+            provs.iter().filter(|(k, _)| k.contains("coding-plan") && !k.contains("start"))
+                .find_map(|(_, v)| pick(v))
+                .or_else(|| provs.values().find_map(pick))
+        }),
+        _ => None,
+    };
+    out.ok_or_else(|| "该账号没有可复制的此项数据".to_string())
+}

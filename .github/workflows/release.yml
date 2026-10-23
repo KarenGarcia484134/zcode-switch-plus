@@ -57,29 +57,21 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Z·SWITCH ${{ github.ref_name }}'
           releaseBody: |
-            本项目基于 [pjpv/zcode-switch](https://github.com/pjpv/zcode-switch) 原开源的基础上增加的功能如下：
+            zcode-switch-plus：基于 [wjsqqj/zcode-switch](https://github.com/wjsqqj/zcode-switch)（其上游为 [pjpv/zcode-switch](https://github.com/pjpv/zcode-switch)）二次开发。
 
-            - 添加 z.ai 邮箱登录支持和界面增强
-            - 实现 zai 登录接力机制：先通过官网登录页建立会话，再跳转到授权端点获取令牌
-            - 在 OAuth 流程中添加邮箱辅助功能，注入 JavaScript 按钮条供用户切换邮箱登录/注册
-            - 添加页面导航监控和 URL 轮询机制，确保登录完成后正确接力到授权页面
-            - 支持从手机号登录页面返回邮箱登录页面的功能
-
-            见 [README](https://github.com/${{ github.repository }}/blob/main/README.md) 了解完整功能。
+            ## 本版改动
+            - 修复：添加国际版（z.ai）账号需要登录两次才能回调成功的问题
+            - 新增：每个账号卡片单独「检查资格」按钮，并显示检查结果
+            - 新增：顶部状态卡片（账号总数 / ZCode 状态 / 可领取 / 额度告急）
+            - 新增：账号卡片一键复制 API Key / JWT / 邮箱 / 用户 ID，国内版/国际版标签
+            - 界面改为浅色青绿主题
 
             ## 下载
-
             - **Windows**：`*_x64-setup.exe` 安装包（推荐）／`*_portable.exe` 便携版
             - **macOS**：`*_aarch64.dmg`（Apple 芯片）／`*_x64.dmg`（Intel 芯片）
             - **Linux**：`*.deb`／`*.AppImage`
 
-            ## 未签名提示
-
-            - Windows：SmartScreen 选「更多信息 → 仍要运行」
-            - macOS：Gatekeeper 右键打开
-            - Linux：AppImage 需 `chmod +x`
-
-            SHA-256 校验和见各 `checksums-*.txt`。
+            未签名：Windows SmartScreen 选「更多信息 → 仍要运行」；macOS 右键打开。
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           args: --bundles ${{ matrix.bundles }} ${{ matrix.rust_target && format('--target {0}', matrix.rust_target) || '' }}

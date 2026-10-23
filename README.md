@@ -1,3 +1,18 @@
+# zcode-switch-plus
+
+> 本项目基于 [wjsqqj/zcode-switch](https://github.com/wjsqqj/zcode-switch)（上游 [pjpv/zcode-switch](https://github.com/pjpv/zcode-switch)）二次开发，沿用原项目 LICENSE。感谢原作者。
+
+## plus 版改动
+
+- **修复国际版需登录两次**：z.ai 官网登录后会先落到 `z.ai/login/callback`，由该页用 code 换取会话并写入 cookie。原逻辑把 `/login/callback` 视为"已登录"，1.5 秒后就接力到授权端点，打断了会话落地；授权端点看不到会话又 307 回登录页，只好再登录一次。现在：回调页视为未完成、URL 轮询需连续两次落在非登录页才接力，且接力后若仍被弹回登录页会自动重试（最多 3 次）。
+- **单账号资格检查**：每个账号卡片新增「检查资格」按钮（激活活动资格 + 查询可领套餐），结果直接显示在卡片上。
+- **状态卡片**：账号总数 / ZCode 状态 / 可领取活动套餐 / 额度告急（任一窗口 ≥90%）。
+- **一键复制**：API Key / JWT / 邮箱 / 用户 ID；国内版 / 国际版标签。
+- **浅色青绿主题**。
+- GitHub Actions：推送 `v*` 标签自动构建 Windows / macOS / Linux 并发布 Release。
+
+---
+
 # Z·SWITCH (zcode-switch)
 
 **简体中文** ｜ [English](README.en.md)

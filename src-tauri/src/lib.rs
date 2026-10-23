@@ -230,6 +230,12 @@ struct ClaimRefreshResult {
 }
 
 #[tauri::command]
+async fn account_secret(id: String, kind: String) -> Result<String, String> {
+    let paths = Paths::detect();
+    store::account_secret(&paths, &id, &kind)
+}
+
+#[tauri::command]
 async fn claim_refresh(id: String) -> Result<ClaimRefreshResult, String> {
     let paths = Paths::detect();
     let mid = store::ensure_virtual_device_mid(&paths, &id)?;
@@ -546,15 +552,11 @@ async fn oauth_begin(app: AppHandle, provider: String) -> Result<serde_json::Val
             );
             let target = relay_to.clone();
             let app4 = app2.clone();
+            let fl4 = flow_relay.clone();
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(1500));
-                if let Some(w) = app4.get_webview_window("login") {
-                    if let Ok(t) = target.parse::<tauri::Url>() {
-                        let _ = w.navigate(t);
-                    }
-                }
+                std::thread::sleep(std::time::Duration::from_millis(2000));
+                relay_navigate(app4, fl4, target);
             });
-            log_after_relay(app2.clone(), flow_relay.clone(), 5000);
         }
         true
     })
@@ -589,6 +591,7 @@ async fn oauth_begin(app: AppHandle, provider: String) -> Result<serde_json::Val
         let guard_flow = flow.clone();
         std::thread::spawn(move || {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+            let mut stable = 0u32;
             while std::time::Instant::now() < deadline {
                 std::thread::sleep(std::time::Duration::from_millis(1000));
                 let ours = pending_oauth_guard().as_ref().map(|p| p.flow == guard_flow).unwrap_or(false);
@@ -599,17 +602,19 @@ async fn oauth_begin(app: AppHandle, provider: String) -> Result<serde_json::Val
                 let Ok(u) = w.url() else { continue };
                 let host = u.host_str().unwrap_or("");
                 if !(host == "z.ai" || host.ends_with(".z.ai")) || is_login_page(u.path()) {
+                    stable = 0;
+                    continue;
+                }
+                // 连续两次落在非登录页才算会话已落地（避免 SPA 回调收尾中途被打断）
+                stable += 1;
+                if stable < 2 {
                     continue;
                 }
                 if !armed.swap(false, std::sync::atomic::Ordering::SeqCst) {
                     return; // 已被 on_navigation 那路接力
                 }
-                std::thread::sleep(std::time::Duration::from_millis(1200)); // 留点时间让官网把回调收尾
                 flowlog::log(&fl, "zai-relay", &format!("poll {host}{} -> authorize", u.path()));
-                if let Ok(t) = target.parse::<tauri::Url>() {
-                    let _ = w.navigate(t);
-                }
-                log_after_relay(app_relay.clone(), fl.clone(), 5000);
+                relay_navigate(app_relay.clone(), fl.clone(), target.clone());
                 return;
             }
         });
@@ -618,6 +623,30 @@ async fn oauth_begin(app: AppHandle, provider: String) -> Result<serde_json::Val
     Ok(json!({ "opened": true, "provider": provider }))
 }
 
+/// 接力到授权端点；若会话尚未生效被弹回登录页，则稍等后自动重试（最多 3 次），
+/// 而不是让用户再登录一遍。
+fn relay_navigate(app: AppHandle, flow: String, target: String) {
+    std::thread::spawn(move || {
+        for attempt in 0..3u32 {
+            let ours = pending_oauth_guard().as_ref().map(|p| p.flow == flow).unwrap_or(false);
+            if !ours { return; }
+            let Some(w) = app.get_webview_window("login") else { return };
+            if let Ok(t) = target.parse::<tauri::Url>() {
+                let _ = w.navigate(t);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5000));
+            let ours = pending_oauth_guard().as_ref().map(|p| p.flow == flow).unwrap_or(false);
+            if !ours { return; }
+            let Some(w) = app.get_webview_window("login") else { return };
+            let Ok(u) = w.url() else { return };
+            flowlog::log(&flow, "zai-after", &format!("try{} {}{}", attempt + 1, u.host_str().unwrap_or(""), u.path()));
+            if !is_login_page(u.path()) { return; }
+            std::thread::sleep(std::time::Duration::from_millis(2000));
+        }
+    });
+}
+
+#[allow(dead_code)]
 /// 接力后留痕：几秒后把窗口实际落点写进日志，便于判断授权是否成功
 fn log_after_relay(app: AppHandle, flow: String, delay_ms: u64) {
     std::thread::spawn(move || {
@@ -632,9 +661,9 @@ fn log_after_relay(app: AppHandle, flow: String, delay_ms: u64) {
 
 /// 登录 / 注册相关路径：说明还没登录完成，zai 接力不能在这些页面触发
 fn is_login_page(path: &str) -> bool {
-    if path.starts_with("/login/callback") {
-        return false; // 登录回跳页：登录已完成
-    }
+    // 注意：/login/callback 是官网用 code 换会话 token、写 cookie 的回跳页，此时会话尚未落地。
+    // 旧逻辑把它当成「已登录」立即接力，会打断回调 → 授权端点看不到会话又 307 回登录页，
+    // 用户只能再登录一次（第二次因已有部分会话才成功）。现在必须等离开回调页后再接力。
     ["/auth", "/login", "/signin", "/sign-in", "/signup", "/sign-up", "/register", "/reset", "/forgot"]
         .iter()
         .any(|p| path.starts_with(p))
@@ -1276,6 +1305,7 @@ pub fn run() {
         ))
         .invoke_handler(tauri::generate_handler![
             get_state,
+            account_secret,
             app_version,
             capture_current,
             rename_account,
