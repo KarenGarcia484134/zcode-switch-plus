@@ -1062,3 +1062,7 @@ input:focus-visible,
 .icon-btn.sync-hl { color: var(--amber); border-color: rgba(20,156,143,.45); }
 .icon-btn.spin svg { animation: zsw-spin 1s linear infinite; }
 @keyframes zsw-spin { to { transform: rotate(360deg); } }
+/* long names: truncate the name, never squash the tags */
+.row-name { display: flex; align-items: center; min-width: 0; white-space: nowrap; }
+.row-name-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.row-name > span:not(.row-name-text) { flex-shrink: 0; white-space: nowrap; }

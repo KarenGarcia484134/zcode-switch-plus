@@ -18,12 +18,6 @@ const BLOCK_PAUSE_MS = 2 * 60 * 60 * 1000;
 const PAUSE_KEY = "zcs.claimBlockedUntil.v2";
 let claimBlockedUntil = {};
 try { claimBlockedUntil = JSON.parse(localStorage.getItem(PAUSE_KEY) || "{}") || {}; } catch { claimBlockedUntil = {}; }
-// 一次性迁移：旧版本的全局暂停（仅存内存）源自 emma 的 405，这里只给该账号补一条暂停
-if (!localStorage.getItem(PAUSE_KEY + ".migrated")) {
-  const EMMA = "0a687a68-e2c4-42eb-95b0-c65fbc63633c";
-  if (!claimBlockedUntil[EMMA]) claimBlockedUntil[EMMA] = Date.now() + 85 * 60 * 1000;
-  try { localStorage.setItem(PAUSE_KEY, JSON.stringify(claimBlockedUntil)); localStorage.setItem(PAUSE_KEY + ".migrated", "1"); } catch {}
-}
 function saveClaimPauses() {
   const now = Date.now();
   for (const k of Object.keys(claimBlockedUntil)) if (!(claimBlockedUntil[k] > now)) delete claimBlockedUntil[k];
@@ -902,7 +896,7 @@ function render() {
       <div class="row-top">
         <span class="notch" style="background:${notchColor(a.id)}"></span>
         <div class="row-main">
-          <div class="row-name">${esc(a.name)}${provTag(a)}${tierBadgeFor(a.id)}${isActive ? `<span class="tag-use">${t("btn.inUse")}</span>` : ""}${a.has_user_info === false ? `<span class="tag-relogin" title="${esc(t("btn.reloginTitle"))}">${t("btn.relogin")}</span>` : ""}${a.jwt_expired ? `<span class="tag-relogin" title="${esc(t("btn.jwtExpiredTitle"))}">${t("btn.jwtExpired")}</span>` : ""}</div>
+          <div class="row-name"><span class="row-name-text" title="${esc(a.name)}">${esc(a.name)}</span>${provTag(a)}${tierBadgeFor(a.id)}${isActive ? `<span class="tag-use">${t("btn.inUse")}</span>` : ""}${a.has_user_info === false ? `<span class="tag-relogin" title="${esc(t("btn.reloginTitle"))}">${t("btn.relogin")}</span>` : ""}${a.jwt_expired ? `<span class="tag-relogin" title="${esc(t("btn.jwtExpiredTitle"))}">${t("btn.jwtExpired")}</span>` : ""}</div>
           <div class="row-meta">${meta}</div>
           <div class="copy-row">
             <span class="copy-chip" click="actions.copy('${a.id}','apikey')">${ic("copy", 12)} ${t("btn.copy.apikey")}</span>
