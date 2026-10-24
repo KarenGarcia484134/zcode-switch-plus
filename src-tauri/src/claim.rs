@@ -293,10 +293,16 @@ pub fn submit_claim(
     }
     let resp = req
         .send_json(serde_json::json!({ "plan_id": plan_id }))
-        .map_err(|e| ClaimError {
-            code: -1,
-            message: http_err(&crate::i18n::tr("err.claim.claim_req"), e),
-            next_at: None,
+        .map_err(|e| {
+            // 405 / unusual activity = 服务端风控（WAF）拦截：单独标记，前端据此停止批量/自动领取，不做重试
+            if let ureq::Error::Status(405, _) = e {
+                return ClaimError { code: 405, message: crate::i18n::tr("claim.fail.blocked"), next_at: None };
+            }
+            let message = http_err(&crate::i18n::tr("err.claim.claim_req"), e);
+            if message.to_ascii_lowercase().contains("unusual activity") {
+                return ClaimError { code: 405, message: crate::i18n::tr("claim.fail.blocked"), next_at: None };
+            }
+            ClaimError { code: -1, message, next_at: None }
         })?
         .into_string()
         .map_err(|e| ClaimError {

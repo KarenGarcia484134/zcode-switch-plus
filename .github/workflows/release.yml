@@ -60,7 +60,7 @@ jobs:
             zcode-switch-plus：基于 [wjsqqj/zcode-switch](https://github.com/wjsqqj/zcode-switch)（其上游为 [pjpv/zcode-switch](https://github.com/pjpv/zcode-switch)）二次开发。
 
             ## 本版改动
-            - v1.8.1：恢复账号卡片「同步当前登录」按钮（可补齐无 config 快照）；当前登录即该账号时切换会自动补齐 config 快照
+            - v1.8.1：恢复账号卡片「同步当前登录」按钮（可补齐无 config 快照）；当前登录即该账号时切换会自动补齐 config 快照；领取遇服务器风控（HTTP 405）给出明确提示并暂停批量/自动领取 2 小时，不再连续重试，批量领取间隔加大
             - 修复：添加国际版（z.ai）账号需要登录两次才能回调成功的问题
             - 新增：每个账号卡片单独「检查资格」按钮，并显示检查结果
             - 新增：顶部状态卡片（账号总数 / ZCode 状态 / 可领取 / 额度告急）

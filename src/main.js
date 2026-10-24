@@ -13,6 +13,15 @@ let acctQuota = {};
 let claimable = {};
 let claimAllRunning = false;
 let elig = {};
+// 服务端风控（HTTP 405）后全局暂停领取一段时间，避免连续请求加重风控
+const BLOCK_PAUSE_MS = 2 * 60 * 60 * 1000;
+let claimBlockedUntil = 0;
+function claimPaused() {
+  const left = claimBlockedUntil - Date.now();
+  if (left <= 0) return false;
+  toast(t("m.claimPaused", { n: Math.ceil(left / 60000) }), "warn");
+  return true;
+}
 const REFRESH_CLAIM_COOLDOWN_MS = 60_000;
 let refreshClaim = { running: false, done: 0, total: 0, cooldownUntil: 0 };
 let refreshTicker = null;
@@ -316,6 +325,7 @@ const actions = {
     const plans = claimable[id]?.plans || [];
     const plan = plans[0];
     if (!plan) { toast(t("m.noClaimable"), "warn"); return; }
+    if (claimPaused()) return;
     claimActive = true;
     try {
       await invoke("claim_start", { id, planId: plan.plan_id });
@@ -335,6 +345,7 @@ const actions = {
       .filter((id) => (claimable[id]?.plans || []).length > 0);
     if (!ids.length) { toast(t("m.noClaimableAccounts"), "warn"); return; }
     if (claimActive || claimAllRunning || refreshClaim.running) return;
+    if (claimPaused()) return;
     claimAllRunning = true;
     claimActive = true;
     try {
@@ -353,7 +364,8 @@ const actions = {
           toast(t("m.claimAcctTimeout", { name }), "warn");
           await invoke("claim_cancel").catch(() => {});
         }
-        if (i < ids.length - 1) await new Promise((res) => setTimeout(res, 1200));
+        if (r && r.code === 405) break; // 风控拦截：停止后续账号，不重试
+        if (i < ids.length - 1) await new Promise((res) => setTimeout(res, 10_000));
       }
     } finally {
       claimAllRunning = false;
@@ -509,6 +521,7 @@ function stopRefreshTickerIfIdle() {
 function autoClaimCooldownFor(r) {
   const now = Date.now();
   if (r.code === 1005 && r.nextAt) return r.nextAt;
+  if (r.code === 405) return now + BLOCK_PAUSE_MS;
   if (Number.isFinite(r.code) && r.code >= 1000) return now + 60 * 60 * 1000;
   if (r.code === "interactive") return now + 60 * 60 * 1000;
   return now + AUTO_CLAIM_INTERVAL_MS;
@@ -516,6 +529,7 @@ function autoClaimCooldownFor(r) {
 
 async function autoClaimTick() {
   if (!state?.auto_claim || autoClaimRunning) return;
+  if (Date.now() < claimBlockedUntil) return;
   if (claimActive || claimAllRunning || refreshClaim.running) return;
   const ids = (state.accounts || [])
     .map((a) => a.id)
@@ -568,13 +582,14 @@ async function autoClaimTick() {
         }
         if (r.ok === false) {
           autoClaimCooldown[id] = autoClaimCooldownFor(r);
+          if (r.code === 405) autoAbortRequested = true; // 风控：整轮停止
           break;
         }
         gotAny = true; roundClaimed++;
         await awaitClaimPreviewFresh(id);
         if (!uiLocked()) render();
         progressed = true;
-        await new Promise((res) => setTimeout(res, 1200));
+        await new Promise((res) => setTimeout(res, 5000));
       }
       if (!gotAny && (claimable[id]?.plans || []).length) roundSkipped++;
       await new Promise((res) => setTimeout(res, AUTO_CLAIM_ACCT_GAP_MS));
@@ -978,6 +993,7 @@ listen("tray-action", (ev) => {
 listen("claim://result", (ev) => {
   const p = ev.payload || {};
   if (claimWaiter && claimWaiter.accountId === p.accountId) claimWaiter.finish(p);
+  if (p.ok === false && p.code === 405) claimBlockedUntil = Date.now() + BLOCK_PAUSE_MS;
   if (p.ok === false) {
     let msg = p.message || t("m.unknownErr");
     if (p.code === 1005 && p.nextAt) {

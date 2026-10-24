@@ -231,4 +231,5 @@ export const en = {
   "s.refreshOnStartDesc": "Refresh every account's quota right after launch; when off, accounts refresh on the normal 5-minute cycle (default off)",
   "btn.syncLive": "Sync current login",
   "btn.syncLiveTitle": "Sync current login: update this account from ZCode's current login credentials and config (fixes \"no config snapshot\"). The ↻ button checks campaign eligibility",
+  "m.claimPaused": "Claiming paused after a server risk-control block; retry in about {n} min (or claim in the official ZCode client)",
 };
