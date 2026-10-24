@@ -1059,5 +1059,6 @@ input:focus-visible,
 .elig.ok { color: var(--mint-dim); }
 .elig.none { color: var(--ink-mute); }
 .elig.err { color: var(--red); }
+.icon-btn.sync-hl { color: var(--amber); border-color: rgba(20,156,143,.45); }
 .icon-btn.spin svg { animation: zsw-spin 1s linear infinite; }
 @keyframes zsw-spin { to { transform: rotate(360deg); } }

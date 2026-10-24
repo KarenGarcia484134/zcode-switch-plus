@@ -881,6 +881,7 @@ function render() {
         </div>
         <div class="row-actions">
           <button class="icon-btn${elig[a.id]?.busy ? " spin" : ""}" title="${t("btn.checkOne")}" aria-label="${t("btn.checkOne")}" click="actions.checkOne('${a.id}')" ${elig[a.id]?.busy ? "disabled" : ""}>${ic("refresh", 16)}</button>
+          <button class="icon-btn${isActive || !a.has_config ? " sync-hl" : ""}" title="${esc(t("btn.syncLiveTitle"))}" aria-label="${t("btn.syncLive")}" click="actions.updateFromLive('${a.id}')" ${s.live_logged_in ? "" : "disabled"}>${ic("capture", 16)}</button>
           <button class="icon-btn" title="${t("btn.quota")}" aria-label="${t("btn.quota")}" click="actions.acctQuota('${a.id}')">${ic("gauge", 16)}</button>
           <button class="icon-btn" title="${t("btn.rename")}" aria-label="${t("btn.rename")}" click="actions.rename('${a.id}')">${ic("pen", 16)}</button>
           <button class="icon-btn" title="${t("btn.export")}" aria-label="${t("btn.export")}" click="actions.exportOne('${a.id}')">${ic("export", 16)}</button>

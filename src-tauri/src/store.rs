@@ -840,6 +840,19 @@ pub fn switch_to(paths: &Paths, id: &str, force: bool, restart: bool, hot: bool)
                 eprintln!("sync-back 失败(不阻断 already 返回): {e}");
             }
         }
+        // 当前登录就是该账号、而它缺 config 快照：旧版配置布局下用现行 config.json 补齐
+        //（新版 provider_config.json 布局不快照 config，保持原逻辑）
+        if target.config.is_none() && !new_gen_provider_config(&paths.data_root) {
+            if let (Ok(mut acc), Some(cfg)) = (load_account(paths, &target.id), read_live_config(paths)) {
+                if acc.config.is_none() {
+                    acc.config = Some(cfg);
+                    acc.updated_at = now_ts();
+                    if let Err(e) = save_account(paths, &acc) {
+                        eprintln!("补齐 config 快照失败(忽略): {e}");
+                    }
+                }
+            }
+        }
         let mid = ensure_virtual_device_mid_locked(paths, &target.id)?;
         write_live_device_mid(paths, &mid)?;
         let uid = ensure_virtual_arms_uid_locked(paths, &target.id)?;
