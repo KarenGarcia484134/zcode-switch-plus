@@ -997,7 +997,9 @@ fn open_captcha_window(app: &AppHandle, auto: bool) -> Result<(), String> {
         }
         return Ok(());
     }
-    let win = tauri::WebviewWindowBuilder::new(
+    let captcha_proxy = claim::zai_proxy();
+    eprintln!("[zcs] captcha: proxy={}", match &captcha_proxy { Some(u) => format!("on ({u})"), None => "off".into() });
+    let mut builder = tauri::WebviewWindowBuilder::new(
         app,
         "captcha",
         tauri::WebviewUrl::App("captcha.html".into()),
@@ -1009,10 +1011,15 @@ fn open_captcha_window(app: &AppHandle, auto: bool) -> Result<(), String> {
     .min_inner_size(340.0, 280.0)
     .maximizable(false)
     .resizable(false)
-    .additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --no-proxy-server")
-    .visible(false)
-    .build()
-    .map_err(|e| e.to_string())?;
+    .visible(false);
+    builder = match captcha_proxy.as_deref().and_then(|u| tauri::Url::parse(u).ok()) {
+        Some(u) => builder
+            .additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection")
+            .proxy_url(u),
+        None => builder
+            .additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --no-proxy-server"),
+    };
+    let win = builder.build().map_err(|e| e.to_string())?;
     center_over_main(app, &win, w, h);
     if !auto {
         let _ = win.show();

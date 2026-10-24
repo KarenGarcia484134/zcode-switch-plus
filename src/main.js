@@ -686,10 +686,19 @@ function tierChipHtml(tier, code) {
   else { label = tier; cls = "other"; }
   return `<span class="tier-b ${cls}">${esc(label)}</span>`;
 }
+function uniqPlans(plans) {
+  const seen = new Set();
+  return (plans || []).filter((p) => {
+    const k = JSON.stringify([p.tier, p.tier_code, p.name, p.expire, p.total, (p.items || []).map((i) => [i.label ?? i.name, i.total, i.used])]);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
 function tierBadgeFor(id) {
   const q = acctQuota[id];
   if (!q?.data) return "";
-  const plans = q.data.plans || [];
+  const plans = uniqPlans(q.data.plans);
   const pairs = plans.map((p) => [p.tier, p.tier_code]);
   const list = (pairs.length ? pairs : q.data.plan_tier ? [[q.data.plan_tier, null]] : []).slice(0, 2);
   if (!list.length) return `<span class="tier-b free">Free</span>`;
@@ -774,7 +783,7 @@ function acctQuotaSlot(id) {
     const msg = q.err.length > 46 ? q.err.slice(0, 46) + "…" : q.err;
     inner = `<span class="aq-err">${esc(msg)}</span>`;
   } else if (q?.data) {
-    const plans = q.data.plans || [];
+    const plans = uniqPlans(q.data.plans);
     if (plans.length >= 2) {
       inner = plans.map(planGroupHtml).join("");
     } else {

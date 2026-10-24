@@ -120,11 +120,47 @@ fn decrypt_credential(v: &str, secret: &str) -> Option<String> {
     }
 }
 
+/// Normalized auth proxy URL when the user's "login uses proxy" setting is on.
+pub fn zai_proxy() -> Option<String> {
+    let settings = crate::store::load_settings(&crate::store::Paths::detect());
+    let raw = settings.auth_proxy()?;
+    match crate::oauth::parse_proxy_url(raw) {
+        Ok(u) => Some(u),
+        Err(e) => {
+            eprintln!("[zcs] proxy setting invalid, using direct: {e}");
+            None
+        }
+    }
+}
+
+/// Apply the auth proxy (if enabled) to a ureq builder, logging on/off.
+pub fn with_zai_proxy(b: ureq::AgentBuilder, tag: &str) -> ureq::AgentBuilder {
+    match zai_proxy() {
+        Some(u) => match ureq::Proxy::new(&u) {
+            Ok(p) => {
+                eprintln!("[zcs] {tag}: proxy=on ({u})");
+                b.proxy(p)
+            }
+            Err(e) => {
+                eprintln!("[zcs] {tag}: proxy invalid ({e}), direct");
+                b
+            }
+        },
+        None => {
+            eprintln!("[zcs] {tag}: proxy=off");
+            b
+        }
+    }
+}
+
 fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(10))
-        .timeout(Duration::from_secs(CLAIM_TIMEOUT_SECS))
-        .build()
+    with_zai_proxy(
+        ureq::AgentBuilder::new()
+            .timeout_connect(Duration::from_secs(10))
+            .timeout(Duration::from_secs(CLAIM_TIMEOUT_SECS)),
+        "claim",
+    )
+    .build()
 }
 
 pub const EVENT_REPORT_URL: &str = "https://zcode.z.ai/api/v1/event/report";
@@ -185,10 +221,13 @@ fn device_os_category() -> &'static str {
 }
 
 pub fn report_activation_events(user_id: &str, device_mid: &str) -> Result<(), String> {
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(10))
-        .timeout(Duration::from_secs(ACTIVATION_TIMEOUT_SECS))
-        .build();
+    let agent = with_zai_proxy(
+        ureq::AgentBuilder::new()
+            .timeout_connect(Duration::from_secs(10))
+            .timeout(Duration::from_secs(ACTIVATION_TIMEOUT_SECS)),
+        "event-report",
+    )
+    .build();
     for element in ACTIVATION_EVENTS {
         let body = activation_event_body(
             element,

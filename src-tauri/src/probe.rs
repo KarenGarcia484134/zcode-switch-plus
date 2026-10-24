@@ -229,10 +229,13 @@ fn classify_via(channels: &[Channel], fetch: &ProbeFetch) -> Option<ProbeOutcome
 }
 
 fn real_fetch(url: &str, token: &str, mid: Option<&str>) -> Result<Value, ProbeErr> {
-    let agent = ureq::AgentBuilder::new()
+    let mut ab = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(5))
-        .timeout(Duration::from_secs(8))
-        .build();
+        .timeout(Duration::from_secs(8));
+    if url.contains("zcode.z.ai") {
+        ab = crate::claim::with_zai_proxy(ab, "probe");
+    }
+    let agent = ab.build();
     let mut req = agent.get(url);
     if url.contains("zcode.z.ai") {
         for (k, v) in quota::zai_billing_headers_with_mid(token, mid.map(str::to_string)) {

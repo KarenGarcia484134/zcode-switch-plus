@@ -401,10 +401,13 @@ pub fn candidate_tokens(creds: &Value, config: Option<&Value>, secret: &str, new
 
 fn http_get_json(url: &str, token: &str, retry_429: bool) -> Result<Value, String> {
     let retry_delays = [500u64, 1500, 4000];
-    let agent = ureq::AgentBuilder::new()
+    let mut ab = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
-        .timeout(Duration::from_secs(20))
-        .build();
+        .timeout(Duration::from_secs(20));
+    if url.contains("zcode.z.ai") {
+        ab = crate::claim::with_zai_proxy(ab, "quota");
+    }
+    let agent = ab.build();
     let headers = if url.contains("zcode.z.ai") {
         zai_billing_headers(token)
     } else {
@@ -775,11 +778,21 @@ fn merge_parts(parts: Vec<QuotaOverview>) -> QuotaOverview {
         refreshed = refreshed.max(p.refreshed_at);
         for s in &p.plans {
             let dup = slot_src.iter().enumerate().any(|(i, src)| {
-                src != &p.source
-                    && slots[i].tier == s.tier
-                    && slots[i].name == s.name
-                    && !slots[i].items.is_empty()
-                    && !s.items.is_empty()
+                let o = &slots[i];
+                // Identical plan returned twice (same channel/source queried via two
+                // hosts, or the API listing it twice): same id/name/tier/expiry.
+                let same_plan = o.tier == s.tier
+                    && o.name == s.name
+                    && o.expire == s.expire
+                    && (o.pid == s.pid || o.pid.is_empty() || s.pid.is_empty())
+                    && o.items.len() == s.items.len()
+                    && o.total == s.total;
+                let cross_src = src != &p.source
+                    && o.tier == s.tier
+                    && o.name == s.name
+                    && !o.items.is_empty()
+                    && !s.items.is_empty();
+                same_plan || cross_src
             });
             if !dup {
                 slots.push(s.clone());
