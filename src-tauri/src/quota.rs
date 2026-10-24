@@ -20,7 +20,7 @@ fn no_window(prog: &str) -> std::process::Command {
 pub const QUOTA_LIMIT_URL: &str = "https://open.bigmodel.cn/api/monitor/usage/quota/limit";
 pub const SUBSCRIPTION_URL: &str = "https://open.bigmodel.cn/api/biz/subscription/list";
 pub const BILLING_BALANCE_URL: &str = "https://zcode.z.ai/api/v1/zcode-plan/billing/balance";
-pub const CLIENT_APP_VERSION: &str = "3.11.2";
+pub const CLIENT_APP_VERSION: &str = "3.16.3";
 
 pub(crate) fn client_platform() -> String {
     let os = crate::zcrypto::node_platform_for(std::env::consts::OS);
@@ -163,9 +163,32 @@ pub(crate) fn zcode_app_version() -> String {
                     return normalize_version(&ver);
                 }
             }
+            // Linux / macOS：读取已安装官方客户端的版本（dpkg / rpm / macOS Info.plist），
+            // 版本过旧时服务端可能不下发活动套餐
+            if let Some(v) = installed_client_version_unix() {
+                return normalize_version(&v);
+            }
             CLIENT_APP_VERSION.to_string()
         })
         .clone()
+}
+
+fn installed_client_version_unix() -> Option<String> {
+    if cfg!(windows) {
+        return None;
+    }
+    let run = |cmd: &str, args: &[&str]| -> Option<String> {
+        let o = std::process::Command::new(cmd).args(args).output().ok()?;
+        let v = String::from_utf8_lossy(&o.stdout).trim().to_string();
+        (o.status.success() && v.chars().next().is_some_and(|c| c.is_ascii_digit())).then_some(v)
+    };
+    run("dpkg-query", &["-W", "-f", "${Version}", "zcode"])
+        .or_else(|| run("rpm", &["-q", "--qf", "%{VERSION}", "zcode"]))
+        .or_else(|| {
+            run("defaults", &["read", "/Applications/ZCode.app/Contents/Info", "CFBundleShortVersionString"])
+        })
+        .map(|v| v.split(['-', '+']).next().unwrap_or("").to_string())
+        .filter(|v| !v.is_empty())
 }
 
 fn is_zcode_display_name(name: &str) -> bool {
@@ -318,7 +341,7 @@ fn coding_plan_api_keys(config: Option<&Value>) -> Vec<String> {
     keys
 }
 
-fn coding_plan_keys_from_creds(creds: &Value, secret: &str) -> Vec<String> {
+pub(crate) fn coding_plan_keys_from_creds(creds: &Value, secret: &str) -> Vec<String> {
     let Some(map) = creds.as_object() else { return vec![] };
     let mut out: Vec<String> = vec![];
     for (k, v) in map {

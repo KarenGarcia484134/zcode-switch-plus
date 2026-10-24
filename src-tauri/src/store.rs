@@ -1507,6 +1507,7 @@ pub fn get_state(paths: &Paths) -> Result<AppState, String> {
         .map(|v| zcrypto::account_identity(v, &paths.home));
     let (zcode_path, zcode_path_ok) = effective_zcode_path(paths);
     let settings = load_settings(paths);
+    let new_gen = new_gen_provider_config(&paths.data_root);
     let summaries = accounts
         .iter()
         .map(|a| AccountSummary {
@@ -1515,7 +1516,8 @@ pub fn get_state(paths: &Paths) -> Result<AppState, String> {
             created_at: a.created_at.clone(),
             updated_at: a.updated_at.clone(),
             is_active: live_hash.as_deref() == Some(a.hash.as_str()),
-            has_config: a.config.is_some(),
+            // 新版客户端（provider_config.json 布局）不再使用 config.json，账号也就不需要 config 快照
+            has_config: a.config.is_some() || new_gen,
             has_user_info: crate::claim::telemetry_user_id(&paths.home, &a.credentials).is_some(),
             jwt_expired: account_jwt_expired(&a.credentials, &paths.home),
             identity: zcrypto::account_identity(&a.credentials, &paths.home),
@@ -1556,6 +1558,9 @@ pub fn account_secret(paths: &Paths, id: &str, kind: &str) -> Result<String, Str
             provs.iter().filter(|(k, _)| k.contains("coding-plan") && !k.contains("start"))
                 .find_map(|(_, v)| pick(v))
                 .or_else(|| provs.values().find_map(pick))
+        }).or_else(|| {
+            // 新版客户端：API Key 存在 credentials 里
+            crate::quota::coding_plan_keys_from_creds(&acc.credentials, &zcrypto::default_secret(&paths.home)).into_iter().next()
         }),
         _ => None,
     };

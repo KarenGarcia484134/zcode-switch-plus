@@ -232,4 +232,5 @@ export const zh = {
   "btn.syncLive": "同步当前登录",
   "btn.syncLiveTitle": "同步当前登录：用 ZCode 当前登录的凭据与配置更新此账号（可补齐「无 config 快照」）。↻ 按钮是检查活动资格",
   "m.claimPaused": "服务器风控刚拦截过领取，已暂停领取，约 {n} 分钟后再试（或在官方 ZCode 客户端领取）",
+  "q.noPlanYet": "暂无套餐额度（尚未领取或已过期）",
 };

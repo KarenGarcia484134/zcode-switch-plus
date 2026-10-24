@@ -778,6 +778,9 @@ function acctQuotaSlot(id) {
       }
     }
   }
+  if (!inner && q?.data && (q.data.is_empty || q.data.source === "no_plan")) {
+    inner = `<span class="aq-loading">${t("q.noPlanYet")}</span>`;
+  }
   if (!strip && !inner) return `<div class="row-quota-slot"></div>`;
   return `<div class="row-quota-slot">${strip}${inner}</div>`;
 }
@@ -887,10 +890,10 @@ function render() {
           <div class="row-name">${esc(a.name)}${provTag(a)}${tierBadgeFor(a.id)}${isActive ? `<span class="tag-use">${t("btn.inUse")}</span>` : ""}${a.has_user_info === false ? `<span class="tag-relogin" title="${esc(t("btn.reloginTitle"))}">${t("btn.relogin")}</span>` : ""}${a.jwt_expired ? `<span class="tag-relogin" title="${esc(t("btn.jwtExpiredTitle"))}">${t("btn.jwtExpired")}</span>` : ""}</div>
           <div class="row-meta">${meta}</div>
           <div class="copy-row">
-            <span class="copy-chip" click="actions.copy('${a.id}','apikey')">⧉ ${t("btn.copy.apikey")}</span>
-            <span class="copy-chip" click="actions.copy('${a.id}','jwt')">⧉ ${t("btn.copy.jwt")}</span>
-            ${a.identity?.email ? `<span class="copy-chip" click="actions.copy('${a.id}','email')">⧉ ${t("btn.copy.email")}</span>` : ""}
-            ${a.identity?.user_id ? `<span class="copy-chip" click="actions.copy('${a.id}','uid')">⧉ ${t("btn.copy.uid")}</span>` : ""}
+            <span class="copy-chip" click="actions.copy('${a.id}','apikey')">${ic("copy", 12)} ${t("btn.copy.apikey")}</span>
+            <span class="copy-chip" click="actions.copy('${a.id}','jwt')">${ic("copy", 12)} ${t("btn.copy.jwt")}</span>
+            ${a.identity?.email ? `<span class="copy-chip" click="actions.copy('${a.id}','email')">${ic("copy", 12)} ${t("btn.copy.email")}</span>` : ""}
+            ${a.identity?.user_id ? `<span class="copy-chip" click="actions.copy('${a.id}','uid')">${ic("copy", 12)} ${t("btn.copy.uid")}</span>` : ""}
           </div>
           ${elig[a.id]?.text ? `<div class="elig ${elig[a.id].kind}">${esc(elig[a.id].text)}</div>` : ""}
         </div>

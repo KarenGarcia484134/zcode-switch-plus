@@ -1389,3 +1389,48 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+#[cfg(test)]
+mod live_probe {
+    use super::*;
+    /// 本机真实数据只读探测：cargo test --lib live_probe -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn live_probe() {
+        let paths = Paths::detect();
+        println!("data_root={:?} new_gen={}", paths.data_root, store::new_gen_provider_config(&paths.data_root));
+        for a in store::list_accounts(&paths).unwrap() {
+            println!("== {} has_config={}", a.name, a.config.is_some());
+            match store::account_quota(&paths, &a.id) {
+                Ok(q) => println!("quota: {}", serde_json::to_string(&q).unwrap()),
+                Err(e) => println!("quota ERR: {e}"),
+            }
+            let secret = zcrypto::default_secret(&paths.home);
+            let keys = quota::coding_plan_keys_from_creds(&a.credentials, &secret);
+            println!("creds keys: {}", keys.len());
+            if let Some(t) = quota::zai_billing_token(&a.credentials, a.config.as_ref(), &secret) {
+                let url = format!("{}?app_version={}", quota::BILLING_BALANCE_URL, quota::zcode_app_version());
+                let mut req = ureq::get(&url);
+                for (k, v) in quota::zai_billing_headers(&t) { req = req.set(&k, &v); }
+                match req.call() { Ok(r) => println!("balance raw: {}", r.into_string().unwrap_or_default()), Err(e) => println!("balance err {e}") }
+            }
+            for k in &keys {
+                for host in ["https://api.z.ai", "https://open.bigmodel.cn"] {
+                    let r = ureq::get(&format!("{host}/api/monitor/usage/quota/limit")).set("Authorization", k).call();
+                    match r { Ok(r) => println!("{host} limit: {}", r.into_string().unwrap_or_default()), Err(ureq::Error::Status(c, r)) => println!("{host} {c} {}", r.into_string().unwrap_or_default()), Err(e) => println!("{host} {e}") }
+                }
+            }
+            println!("app_version={} platform={}", quota::zcode_app_version(), quota::client_platform());
+            if std::env::var("ZSW_PROBE_ACTIVATE").is_ok() {
+                if let (Some(uid), Some(m)) = (claim::telemetry_user_id(&paths.home, &a.credentials), a.virtual_device_mid.clone()) {
+                    println!("activation: {:?}", claim::report_activation_events(&uid, &m));
+                }
+            }
+            let mid = a.virtual_device_mid.clone();
+            match claim::preview_plans(&paths.home, &a.credentials, a.config.as_ref(), mid) {
+                Ok(p) => println!("plans: {}", serde_json::to_string(&p).unwrap()),
+                Err(e) => println!("plans ERR: {e}"),
+            }
+        }
+    }
+}
