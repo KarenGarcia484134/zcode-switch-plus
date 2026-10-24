@@ -231,6 +231,6 @@ export const zh = {
   "s.refreshOnStartDesc": "开启后程序启动时立即逐个刷新所有账号额度；关闭时按 5 分钟周期慢慢刷新（默认关闭）",
   "btn.syncLive": "同步当前登录",
   "btn.syncLiveTitle": "同步当前登录：用 ZCode 当前登录的凭据与配置更新此账号（可补齐「无 config 快照」）。↻ 按钮是检查活动资格",
-  "m.claimPaused": "服务器风控刚拦截过领取，已暂停领取，约 {n} 分钟后再试（或在官方 ZCode 客户端领取）",
+  "m.claimPaused": "账号 {name} 刚被服务器风控拦截，已暂停该账号的领取，约 {n} 分钟后再试（其他账号不受影响）",
   "q.noPlanYet": "暂无套餐额度（尚未领取或已过期）",
 };

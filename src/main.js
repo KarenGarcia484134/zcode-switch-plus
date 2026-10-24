@@ -13,13 +13,29 @@ let acctQuota = {};
 let claimable = {};
 let claimAllRunning = false;
 let elig = {};
-// 服务端风控（HTTP 405）后全局暂停领取一段时间，避免连续请求加重风控
+// 服务端风控（HTTP 405）后按账号暂停领取一段时间（持久化到 localStorage），其他账号仍可手动领取
 const BLOCK_PAUSE_MS = 2 * 60 * 60 * 1000;
-let claimBlockedUntil = 0;
-function claimPaused() {
-  const left = claimBlockedUntil - Date.now();
+const PAUSE_KEY = "zcs.claimBlockedUntil.v2";
+let claimBlockedUntil = {};
+try { claimBlockedUntil = JSON.parse(localStorage.getItem(PAUSE_KEY) || "{}") || {}; } catch { claimBlockedUntil = {}; }
+// 一次性迁移：旧版本的全局暂停（仅存内存）源自 emma 的 405，这里只给该账号补一条暂停
+if (!localStorage.getItem(PAUSE_KEY + ".migrated")) {
+  const EMMA = "0a687a68-e2c4-42eb-95b0-c65fbc63633c";
+  if (!claimBlockedUntil[EMMA]) claimBlockedUntil[EMMA] = Date.now() + 85 * 60 * 1000;
+  try { localStorage.setItem(PAUSE_KEY, JSON.stringify(claimBlockedUntil)); localStorage.setItem(PAUSE_KEY + ".migrated", "1"); } catch {}
+}
+function saveClaimPauses() {
+  const now = Date.now();
+  for (const k of Object.keys(claimBlockedUntil)) if (!(claimBlockedUntil[k] > now)) delete claimBlockedUntil[k];
+  try { localStorage.setItem(PAUSE_KEY, JSON.stringify(claimBlockedUntil)); } catch {}
+}
+function pauseAccount(id) { if (!id) return; claimBlockedUntil[id] = Date.now() + BLOCK_PAUSE_MS; saveClaimPauses(); }
+function accountPausedLeft(id) { return (claimBlockedUntil[id] || 0) - Date.now(); }
+function claimPaused(id) {
+  const left = accountPausedLeft(id);
   if (left <= 0) return false;
-  toast(t("m.claimPaused", { n: Math.ceil(left / 60000) }), "warn");
+  const name = state?.accounts?.find((a) => a.id === id)?.name || id;
+  toast(t("m.claimPaused", { name, n: Math.ceil(left / 60000) }), "warn");
   return true;
 }
 const REFRESH_CLAIM_COOLDOWN_MS = 60_000;
@@ -325,7 +341,7 @@ const actions = {
     const plans = claimable[id]?.plans || [];
     const plan = plans[0];
     if (!plan) { toast(t("m.noClaimable"), "warn"); return; }
-    if (claimPaused()) return;
+    if (claimPaused(id)) return;
     claimActive = true;
     try {
       await invoke("claim_start", { id, planId: plan.plan_id });
@@ -342,10 +358,10 @@ const actions = {
   async claimAll() {
     const ids = (state?.accounts || [])
       .map((a) => a.id)
-      .filter((id) => (claimable[id]?.plans || []).length > 0);
+      .filter((id) => (claimable[id]?.plans || []).length > 0)
+      .filter((id) => accountPausedLeft(id) <= 0); // 跳过被风控暂停的账号
     if (!ids.length) { toast(t("m.noClaimableAccounts"), "warn"); return; }
     if (claimActive || claimAllRunning || refreshClaim.running) return;
-    if (claimPaused()) return;
     claimAllRunning = true;
     claimActive = true;
     try {
@@ -529,11 +545,10 @@ function autoClaimCooldownFor(r) {
 
 async function autoClaimTick() {
   if (!state?.auto_claim || autoClaimRunning) return;
-  if (Date.now() < claimBlockedUntil) return;
   if (claimActive || claimAllRunning || refreshClaim.running) return;
   const ids = (state.accounts || [])
     .map((a) => a.id)
-    .filter((id) => (autoClaimCooldown[id] ?? 0) <= Date.now());
+    .filter((id) => (autoClaimCooldown[id] ?? 0) <= Date.now() && accountPausedLeft(id) <= 0);
   if (!ids.length) {
     if ((state.accounts || []).some((a) => (claimable[a.id]?.plans || []).length > 0)) {
       lastAutoRound = { at: Date.now(), claimed: 0, skipped: 0, cooldownAll: true };
@@ -996,7 +1011,7 @@ listen("tray-action", (ev) => {
 listen("claim://result", (ev) => {
   const p = ev.payload || {};
   if (claimWaiter && claimWaiter.accountId === p.accountId) claimWaiter.finish(p);
-  if (p.ok === false && p.code === 405) claimBlockedUntil = Date.now() + BLOCK_PAUSE_MS;
+  if (p.ok === false && p.code === 405) pauseAccount(p.accountId);
   if (p.ok === false) {
     let msg = p.message || t("m.unknownErr");
     if (p.code === 1005 && p.nextAt) {
