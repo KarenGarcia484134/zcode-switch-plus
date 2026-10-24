@@ -33,7 +33,7 @@ export function toast(msg, kind = "ok", detail = "") {
   t.innerHTML = `<span class="t-ic">${ic(kind === "ok" ? "check" : "alert", 16)}</span>
     <span class="t-body">${esc(msg)}${detail ? `<span class="detail">${esc(detail)}</span>` : ""}</span>`;
   zone.appendChild(t);
-  setTimeout(() => t.remove(), detail ? 5200 : 3200);
+  setTimeout(() => t.remove(), kind === "err" ? 10000 : (detail ? 5200 : 3200));
 }
 
 function runAttr(expr, event) {

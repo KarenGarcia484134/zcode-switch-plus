@@ -278,13 +278,24 @@ async fn claim_start(
         config: acc.config,
         device_mid: mid,
     });
+    eprintln!("[claim] start account={} plan={} auto={:?}", acc.name, plan.plan_id, auto);
     open_captcha_window(&app, auto.unwrap_or(false))?;
     Ok(json!({ "account": acc.name, "plan": display }))
 }
 
 #[tauri::command]
 async fn claim_captcha_config() -> Result<claim::CaptchaConfig, String> {
-    claim::fetch_captcha_config()
+    let r = claim::fetch_captcha_config();
+    match &r {
+        Ok(c) => eprintln!("[captcha] config enabled={} scene_id_set={} region={:?}", c.enabled, !c.scene_id.is_empty(), c.region),
+        Err(e) => eprintln!("[captcha] config error: {e}"),
+    }
+    r
+}
+
+#[tauri::command]
+fn captcha_log(msg: String) {
+    eprintln!("[captcha-js] {}", claim::trunc(&msg, 800));
 }
 
 #[tauri::command]
@@ -293,7 +304,14 @@ async fn claim_captcha_submit(
     param: String,
     region: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let pending = pending_guard().take().ok_or_else(|| i18n::tr("err.claim.none_pending"))?;
+    eprintln!("[claim] captcha_submit called param_len={} region={:?}", param.len(), region);
+    let pending = match pending_guard().take() {
+        Some(p) => p,
+        None => {
+            eprintln!("[claim] captcha_submit: NO pending claim (window closed/cancelled earlier?)");
+            return Err(i18n::tr("err.claim.none_pending"));
+        }
+    };
     let paths = Paths::detect();
     let res = claim::submit_claim(
         &paths.home,
@@ -325,6 +343,7 @@ async fn claim_captcha_submit(
                 server_time,
             };
             let p = serde_json::to_value(&outcome).unwrap_or(Value::Null);
+            eprintln!("[claim] result OK payload={p}");
             let _ = app.emit("claim://result", &p);
             p
         }
@@ -335,6 +354,7 @@ async fn claim_captcha_submit(
                 &pending.plan_name,
                 &e,
             );
+            eprintln!("[claim] result FAIL payload={p}");
             let _ = app.emit("claim://result", &p);
             return Ok(p);
         }
@@ -344,12 +364,14 @@ async fn claim_captcha_submit(
 
 #[tauri::command]
 async fn claim_cancel(app: AppHandle) -> Result<(), String> {
+    eprintln!("[claim] claim_cancel called (pending dropped, captcha window closing)");
     *pending_guard() = None;
     close_captcha_window(&app);
     Ok(())
 }
 
 fn close_captcha_window(app: &AppHandle) {
+    eprintln!("[captcha] close_captcha_window()");
     if let Some(w) = app.get_webview_window("captcha") {
         let _ = w.close();
     }
@@ -1324,6 +1346,7 @@ pub fn run() {
             claim_captcha_config,
             claim_captcha_submit,
             claim_cancel,
+            captcha_log,
             oauth_providers,
             oauth_begin,
             set_auth_proxy,
@@ -1355,6 +1378,7 @@ pub fn run() {
                     }
                 }
                 if window.label() == "captcha" {
+                    eprintln!("[captcha] window close requested/destroyed event; pending_was_set={}", pending_guard().is_some());
                     *pending_guard() = None;
                 }
             }

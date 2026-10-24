@@ -11,16 +11,27 @@ const $detail = document.getElementById("cap-detail");
 const $dot = document.getElementById("cap-dot");
 const $btn = document.getElementById("cap-btn");
 
+function log(msg) {
+  try { invoke("captcha_log", { msg: String(msg) }).catch(() => {}); } catch { }
+}
+const j = (x) => { try { return typeof x === "string" ? x : JSON.stringify(x); } catch { return String(x); } };
+window.addEventListener("error", (e) => log(`window.error: ${e.message} @ ${e.filename}:${e.lineno}`));
+window.addEventListener("unhandledrejection", (e) => log(`unhandledrejection: ${j(e.reason?.message || e.reason)}`));
+window.addEventListener("beforeunload", () => log(`beforeunload (submitted=${submitted})`));
+
 function status(text, tone = "run") {
+  log(`status[${tone}]: ${text}`);
   $text.textContent = text;
   $dot.className = "cap-dot" + (tone === "ok" ? " ok" : tone === "err" ? " err" : "");
 }
 
 function detail(text) {
+  if (text) log(`detail: ${text}`);
   $detail.textContent = text || "";
 }
 
 document.addEventListener("securitypolicyviolation", (e) => {
+  log(`CSP violation: directive=${e.violatedDirective} blocked=${String(e.blockedURI).slice(0, 200)} source=${e.sourceFile}:${e.lineNumber}`);
   detail(t("c.cspBlocked", { directive: e.violatedDirective, uri: String(e.blockedURI).slice(0, 70) }));
 });
 
@@ -80,17 +91,20 @@ async function run() {
   status(t("c.traceless"));
 
   const submit = (param) => {
+    log(`success callback: param_len=${param ? String(param).length : 0} submitted=${submitted}`);
     if (submitted || !param || !param.trim()) return;
     submitted = true;
     clearTimeout(tracelessTimer);
     status(t("c.passed"));
-    invoke("claim_captcha_submit", { param, region }).catch((e) => {
+    invoke("claim_captcha_submit", { param, region }).then((r) => log(`claim_captcha_submit returned: ${j(r).slice(0, 400)}`)).catch((e) => {
+      log(`claim_captcha_submit error: ${j(e)}`);
       status(t("c.claimReqFail"), "err");
       detail(stripErr(e));
     });
   };
 
   const interactive = (why) => {
+    log(`interactive fallback: ${why === undefined ? "traceless timeout" : j(why).slice(0, 400)}`);
     notifyStuck();
     clearTimeout(tracelessTimer);
     status(t("c.interactive"));
@@ -108,6 +122,7 @@ async function run() {
       element: "#cap-holder",
       button: "#cap-btn",
       getInstance: (instance) => {
+        log(`getInstance: traceless=${typeof instance.startTracelessVerification}`);
         if (typeof instance.startTracelessVerification === "function") {
           instance.startTracelessVerification();
           tracelessTimer = setTimeout(interactive, TRACELESS_TIMEOUT);
@@ -116,8 +131,9 @@ async function run() {
         }
       },
       success: (param) => submit(typeof param === "string" ? param : param?.captchaVerifyParam),
-      fail: (p) => interactive(p),
-      onError: (p) => interactive(p),
+      fail: (p) => { log(`fail callback: ${j(p).slice(0, 400)}`); interactive(p); },
+      onError: (p) => { log(`onError callback: ${j(p).slice(0, 400)}`); interactive(p); },
+      onClose: () => log("captcha popup onClose"),
     });
   } catch (e) {
     notifyStuck();
@@ -130,4 +146,5 @@ $btn.addEventListener("click", () => {
   if (!$btn.hidden) status(t("c.inPopup"));
 });
 
+log(`captcha.js loaded href=${location.href}`);
 run();

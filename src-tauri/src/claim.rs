@@ -291,25 +291,36 @@ pub fn submit_claim(
     if let Some(r) = captcha_region.filter(|r| !r.trim().is_empty()) {
         req = req.set("X-Aliyun-Captcha-Verify-Region", r.trim());
     }
-    let resp = req
-        .send_json(serde_json::json!({ "plan_id": plan_id }))
-        .map_err(|e| {
+    eprintln!("[claim] POST {BILLING_CLAIM_URL} plan_id={plan_id} region={:?} captcha_param_len={}", captcha_region, captcha_param.trim().len());
+    let resp = match req.send_json(serde_json::json!({ "plan_id": plan_id })) {
+        Ok(r) => {
+            eprintln!("[claim] HTTP status {}", r.status());
+            r.into_string().map_err(|e| ClaimError {
+                code: -1,
+                message: crate::i18n::trf("err.http.read", &[("e", &e.to_string())]),
+                next_at: None,
+            })?
+        }
+        Err(ureq::Error::Status(status, r)) => {
+            let body = r.into_string().unwrap_or_default();
+            eprintln!("[claim] HTTP error status {status} body={}", trunc(&body, 600));
             // 405 / unusual activity = 服务端风控（WAF）拦截：单独标记，前端据此停止批量/自动领取，不做重试
-            if let ureq::Error::Status(405, _) = e {
-                return ClaimError { code: 405, message: crate::i18n::tr("claim.fail.blocked"), next_at: None };
+            if status == 405 || body.to_ascii_lowercase().contains("unusual activity") {
+                return Err(ClaimError { code: 405, message: crate::i18n::tr("claim.fail.blocked"), next_at: None });
             }
-            let message = http_err(&crate::i18n::tr("err.claim.claim_req"), e);
-            if message.to_ascii_lowercase().contains("unusual activity") {
-                return ClaimError { code: 405, message: crate::i18n::tr("claim.fail.blocked"), next_at: None };
-            }
-            ClaimError { code: -1, message, next_at: None }
-        })?
-        .into_string()
-        .map_err(|e| ClaimError {
-            code: -1,
-            message: crate::i18n::trf("err.http.read", &[("e", &e.to_string())]),
-            next_at: None,
-        })?;
+            let msg = serde_json::from_str::<Value>(&body)
+                .ok()
+                .and_then(|v| ["msg", "message", "error"].iter()
+                    .find_map(|k| v.get(k).and_then(|x| x.as_str()).map(String::from)))
+                .unwrap_or_default();
+            return Err(ClaimError { code: -1, message: format!("{} HTTP {status}: {msg}", crate::i18n::tr("err.claim.claim_req")), next_at: None });
+        }
+        Err(e) => {
+            eprintln!("[claim] transport error: {e}");
+            return Err(ClaimError { code: -1, message: format!("{} {e}", crate::i18n::tr("err.claim.claim_req")), next_at: None });
+        }
+    };
+    eprintln!("[claim] response body={}", trunc(&resp, 600));
     let v: Value = serde_json::from_str(&resp).unwrap_or(Value::String(resp));
     let code = v.get("code").and_then(|c| c.as_i64()).unwrap_or(-1);
     if code != 0 {
@@ -445,4 +456,9 @@ pub fn failure_message(code: i64, body: &Value) -> String {
     } else {
         crate::i18n::trf("claim.fail.with_server", &[("base", &base), ("server_msg", &server_msg)])
     }
+}
+
+pub fn trunc(s: &str, n: usize) -> String {
+    let t: String = s.chars().take(n).collect();
+    if s.chars().count() > n { format!("{t}…") } else { t }
 }
