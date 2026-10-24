@@ -13,26 +13,9 @@ let acctQuota = {};
 let claimable = {};
 let claimAllRunning = false;
 let elig = {};
-// 服务端风控（HTTP 405）后按账号暂停领取一段时间（持久化到 localStorage），其他账号仍可手动领取
-const BLOCK_PAUSE_MS = 2 * 60 * 60 * 1000;
-const PAUSE_KEY = "zcs.claimBlockedUntil.v2";
-let claimBlockedUntil = {};
-try { claimBlockedUntil = JSON.parse(localStorage.getItem(PAUSE_KEY) || "{}") || {}; } catch { claimBlockedUntil = {}; }
-function saveClaimPauses() {
-  const now = Date.now();
-  for (const k of Object.keys(claimBlockedUntil)) if (!(claimBlockedUntil[k] > now)) delete claimBlockedUntil[k];
-  try { localStorage.setItem(PAUSE_KEY, JSON.stringify(claimBlockedUntil)); } catch {}
-}
-function pauseAccount(id) { if (!id) return; claimBlockedUntil[id] = Date.now() + BLOCK_PAUSE_MS; saveClaimPauses(); }
-function accountPausedLeft(id) { return (claimBlockedUntil[id] || 0) - Date.now(); }
-function claimPaused(id) {
-  const left = accountPausedLeft(id);
-  if (left <= 0) return false;
-  const name = state?.accounts?.find((a) => a.id === id)?.name || id;
-  toast(t("m.claimPaused", { name, n: Math.ceil(left / 60000) }), "warn");
-  return true;
-}
-const REFRESH_CLAIM_COOLDOWN_MS = 60_000;
+// 不做任何领取限制：清理旧版暂停记录
+try { localStorage.removeItem("zcs.claimBlockedUntil.v2"); localStorage.removeItem("zcs.claimBlockedUntil"); } catch {}
+const REFRESH_CLAIM_COOLDOWN_MS = 0;
 let refreshClaim = { running: false, done: 0, total: 0, cooldownUntil: 0 };
 let refreshTicker = null;
 
@@ -335,7 +318,6 @@ const actions = {
     const plans = claimable[id]?.plans || [];
     const plan = plans[0];
     if (!plan) { toast(t("m.noClaimable"), "warn"); return; }
-    if (claimPaused(id)) return;
     claimActive = true;
     try {
       await invoke("claim_start", { id, planId: plan.plan_id });
@@ -352,8 +334,7 @@ const actions = {
   async claimAll() {
     const ids = (state?.accounts || [])
       .map((a) => a.id)
-      .filter((id) => (claimable[id]?.plans || []).length > 0)
-      .filter((id) => accountPausedLeft(id) <= 0); // 跳过被风控暂停的账号
+      .filter((id) => (claimable[id]?.plans || []).length > 0);
     if (!ids.length) { toast(t("m.noClaimableAccounts"), "warn"); return; }
     if (claimActive || claimAllRunning || refreshClaim.running) return;
     claimAllRunning = true;
@@ -374,8 +355,6 @@ const actions = {
           toast(t("m.claimAcctTimeout", { name }), "warn");
           await invoke("claim_cancel").catch(() => {});
         }
-        if (r && r.code === 405) break; // 风控拦截：停止后续账号，不重试
-        if (i < ids.length - 1) await new Promise((res) => setTimeout(res, 10_000));
       }
     } finally {
       claimAllRunning = false;
@@ -427,7 +406,6 @@ const actions = {
         }
         scheduleNext(id);
         if (!uiLocked()) render();
-        if (i < ids.length - 1) await new Promise((res) => setTimeout(res, 5000));
       }
     } finally {
       refreshClaim.running = false;
@@ -442,8 +420,6 @@ const actions = {
     const name = accountName(id);
     if (elig[id]?.busy) return;
     if (refreshClaim.running || claimAllRunning || claimActive) { toast(t("m.claimBusy"), "warn"); return; }
-    const left = (elig[id]?.cooldownUntil || 0) - Date.now();
-    if (left > 0) { toast(t("btn.checkOneCooldown", { n: Math.ceil(left / 1000) }), "warn"); return; }
     elig[id] = { busy: true };
     claimable[id] = { plans: claimable[id]?.plans || [], busy: true };
     if (!uiLocked()) render();
@@ -468,7 +444,6 @@ const actions = {
       toast(t("m.refreshClaimAcctErr", { name, err: stripErr(e) }), "err");
     }
     elig[id].at = Date.now();
-    elig[id].cooldownUntil = Date.now() + 15_000;
     loadAcctQuota(id);
     if (!uiLocked()) render();
   },
@@ -531,9 +506,6 @@ function stopRefreshTickerIfIdle() {
 function autoClaimCooldownFor(r) {
   const now = Date.now();
   if (r.code === 1005 && r.nextAt) return r.nextAt;
-  if (r.code === 405) return now + BLOCK_PAUSE_MS;
-  if (Number.isFinite(r.code) && r.code >= 1000) return now + 60 * 60 * 1000;
-  if (r.code === "interactive") return now + 60 * 60 * 1000;
   return now + AUTO_CLAIM_INTERVAL_MS;
 }
 
@@ -542,7 +514,7 @@ async function autoClaimTick() {
   if (claimActive || claimAllRunning || refreshClaim.running) return;
   const ids = (state.accounts || [])
     .map((a) => a.id)
-    .filter((id) => (autoClaimCooldown[id] ?? 0) <= Date.now() && accountPausedLeft(id) <= 0);
+    .filter((id) => (autoClaimCooldown[id] ?? 0) <= Date.now());
   if (!ids.length) {
     if ((state.accounts || []).some((a) => (claimable[a.id]?.plans || []).length > 0)) {
       lastAutoRound = { at: Date.now(), claimed: 0, skipped: 0, cooldownAll: true };
@@ -728,7 +700,7 @@ function claimStripHtml(id) {
     ${ic("gift", 15)}
     <span class="claim-name">${esc(label)}</span>
     ${grants ? `<span class="claim-grants">${esc(grants)}</span>` : ""}
-    <button class="btn-claim has-ic" click="actions.claim('${id}')" ${claimAllRunning || refreshClaim.running || claimActive || autoClaimRunning ? "disabled" : ""}>${ic("gift", 13)} ${t("btn.claim")}</button>
+    <button class="btn-claim has-ic" click="actions.claim('${id}')">${ic("gift", 13)} ${t("btn.claim")}</button>
   </div>`;
 }
 
@@ -916,7 +888,7 @@ function render() {
           ${elig[a.id]?.text ? `<div class="elig ${elig[a.id].kind}">${esc(elig[a.id].text)}</div>` : ""}
         </div>
         <div class="row-actions">
-          <button class="icon-btn${elig[a.id]?.busy ? " spin" : ""}" title="${t("btn.checkOne")}" aria-label="${t("btn.checkOne")}" click="actions.checkOne('${a.id}')" ${elig[a.id]?.busy ? "disabled" : ""}>${ic("refresh", 16)}</button>
+          <button class="icon-btn${elig[a.id]?.busy ? " spin" : ""}" title="${t("btn.checkOne")}" aria-label="${t("btn.checkOne")}" click="actions.checkOne('${a.id}')">${ic("refresh", 16)}</button>
           <button class="icon-btn${isActive || !a.has_config ? " sync-hl" : ""}" title="${esc(t("btn.syncLiveTitle"))}" aria-label="${t("btn.syncLive")}" click="actions.updateFromLive('${a.id}')" ${s.live_logged_in ? "" : "disabled"}>${ic("capture", 16)}</button>
           <button class="icon-btn" title="${t("btn.quota")}" aria-label="${t("btn.quota")}" click="actions.acctQuota('${a.id}')">${ic("gauge", 16)}</button>
           <button class="icon-btn" title="${t("btn.rename")}" aria-label="${t("btn.rename")}" click="actions.rename('${a.id}')">${ic("pen", 16)}</button>
@@ -958,7 +930,7 @@ function render() {
         ${ic("capture", 16)} ${t("btn.saveLogin")}
       </button>
       ${claimableCount > 0
-        ? `<button class="btn-ghost has-ic claim-all" click="actions.claimAll()" ${claimAllRunning || refreshClaim.running || autoClaimRunning ? "disabled" : ""}
+        ? `<button class="btn-ghost has-ic claim-all" click="actions.claimAll()"
             title="${t("btn.claimAllTitle")}">${ic("gift", 16)} ${t("btn.claimAll")}${claimableCount > 1 ? ` (${claimableCount})` : ""}</button>`
         : ""}
       ${(s.accounts.length > 0)
@@ -1014,7 +986,6 @@ listen("tray-action", (ev) => {
 listen("claim://result", (ev) => {
   const p = ev.payload || {};
   if (claimWaiter && claimWaiter.accountId === p.accountId) claimWaiter.finish(p);
-  if (p.ok === false && p.code === 405) pauseAccount(p.accountId);
   if (p.ok === false) {
     let msg = p.message || t("m.unknownErr");
     if (p.code === 1005 && p.nextAt) {

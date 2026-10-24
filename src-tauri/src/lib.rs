@@ -2,6 +2,7 @@ pub mod cipher;
 pub mod cli;
 pub mod i18n;
 mod claim;
+mod net;
 mod flowlog;
 mod oauth;
 mod probe;
@@ -997,9 +998,7 @@ fn open_captcha_window(app: &AppHandle, auto: bool) -> Result<(), String> {
         }
         return Ok(());
     }
-    let captcha_proxy = claim::zai_proxy();
-    eprintln!("[zcs] captcha: proxy={}", match &captcha_proxy { Some(u) => format!("on ({u})"), None => "off".into() });
-    let mut builder = tauri::WebviewWindowBuilder::new(
+    let builder = tauri::WebviewWindowBuilder::new(
         app,
         "captcha",
         tauri::WebviewUrl::App("captcha.html".into()),
@@ -1012,14 +1011,7 @@ fn open_captcha_window(app: &AppHandle, auto: bool) -> Result<(), String> {
     .maximizable(false)
     .resizable(false)
     .visible(false);
-    builder = match captcha_proxy.as_deref().and_then(|u| tauri::Url::parse(u).ok()) {
-        Some(u) => builder
-            .additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection")
-            .proxy_url(u),
-        None => builder
-            .additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --no-proxy-server"),
-    };
-    let win = builder.build().map_err(|e| e.to_string())?;
+    let win = net::webview(builder, "captcha").build().map_err(|e| e.to_string())?;
     center_over_main(app, &win, w, h);
     if !auto {
         let _ = win.show();
@@ -1120,8 +1112,8 @@ async fn open_settings(app: AppHandle) -> Result<(), String> {
     .inner_size(w, h)
     .min_inner_size(440.0, 540.0)
     .resizable(true)
-    .additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --no-proxy-server")
-    .visible(false)
+    .visible(false);
+    let win = net::webview(win, "settings")
     .build()
     .map_err(|e| e.to_string())?;
     center_over_main(&app, &win, w, h);
@@ -1395,6 +1387,17 @@ pub fn run() {
             if let Ok(data_dir) = app.path().app_local_data_dir() {
                 flowlog::init(&data_dir);
             }
+            {
+                let b = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
+                    .title("Z·SWITCH")
+                    .inner_size(680.0, 820.0)
+                    .min_inner_size(520.0, 640.0)
+                    .resizable(true)
+                    .center()
+                    .theme(Some(tauri::Theme::Light))
+                    .background_color(tauri::window::Color(10, 10, 12, 255));
+                net::webview(b, "main").build()?;
+            }
             let _tray = TrayIconBuilder::with_id(TRAY_ID)
                 .icon(app.default_window_icon().expect("no window icon").clone())
                 .tooltip("Z·SWITCH")
@@ -1441,13 +1444,13 @@ mod live_probe {
             println!("creds keys: {}", keys.len());
             if let Some(t) = quota::zai_billing_token(&a.credentials, a.config.as_ref(), &secret) {
                 let url = format!("{}?app_version={}", quota::BILLING_BALANCE_URL, quota::zcode_app_version());
-                let mut req = ureq::get(&url);
+                let mut req = crate::net::agent_builder("probe").build().get(&url);
                 for (k, v) in quota::zai_billing_headers(&t) { req = req.set(&k, &v); }
                 match req.call() { Ok(r) => println!("balance raw: {}", r.into_string().unwrap_or_default()), Err(e) => println!("balance err {e}") }
             }
             for k in &keys {
                 for host in ["https://api.z.ai", "https://open.bigmodel.cn"] {
-                    let r = ureq::get(&format!("{host}/api/monitor/usage/quota/limit")).set("Authorization", k).call();
+                    let r = crate::net::agent_builder("probe").build().get(&format!("{host}/api/monitor/usage/quota/limit")).set("Authorization", k).call();
                     match r { Ok(r) => println!("{host} limit: {}", r.into_string().unwrap_or_default()), Err(ureq::Error::Status(c, r)) => println!("{host} {c} {}", r.into_string().unwrap_or_default()), Err(e) => println!("{host} {e}") }
                 }
             }

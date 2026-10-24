@@ -401,12 +401,9 @@ pub fn candidate_tokens(creds: &Value, config: Option<&Value>, secret: &str, new
 
 fn http_get_json(url: &str, token: &str, retry_429: bool) -> Result<Value, String> {
     let retry_delays = [500u64, 1500, 4000];
-    let mut ab = ureq::AgentBuilder::new()
+    let ab = crate::net::agent_builder("quota")
         .timeout_connect(Duration::from_secs(10))
         .timeout(Duration::from_secs(20));
-    if url.contains("zcode.z.ai") {
-        ab = crate::claim::with_zai_proxy(ab, "quota");
-    }
     let agent = ab.build();
     let headers = if url.contains("zcode.z.ai") {
         zai_billing_headers(token)

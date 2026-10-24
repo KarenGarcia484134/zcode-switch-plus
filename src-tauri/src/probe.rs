@@ -229,12 +229,9 @@ fn classify_via(channels: &[Channel], fetch: &ProbeFetch) -> Option<ProbeOutcome
 }
 
 fn real_fetch(url: &str, token: &str, mid: Option<&str>) -> Result<Value, ProbeErr> {
-    let mut ab = ureq::AgentBuilder::new()
+    let ab = crate::net::agent_builder("probe")
         .timeout_connect(Duration::from_secs(5))
         .timeout(Duration::from_secs(8));
-    if url.contains("zcode.z.ai") {
-        ab = crate::claim::with_zai_proxy(ab, "probe");
-    }
     let agent = ab.build();
     let mut req = agent.get(url);
     if url.contains("zcode.z.ai") {
