@@ -60,18 +60,21 @@ jobs:
             zcode-switch-plus：基于 [wjsqqj/zcode-switch](https://github.com/wjsqqj/zcode-switch)（其上游为 [pjpv/zcode-switch](https://github.com/pjpv/zcode-switch)）二次开发。
 
             ## 本版改动
-            - v1.8.1：恢复账号卡片「同步当前登录」按钮（可补齐无 config 快照）；当前登录即该账号时切换会自动补齐 config 快照；领取遇服务器风控（HTTP 405）给出明确提示并暂停批量/自动领取 2 小时，不再连续重试，批量领取间隔加大
-            - 修复：添加国际版（z.ai）账号需要登录两次才能回调成功的问题
-            - 新增：每个账号卡片单独「检查资格」按钮，并显示检查结果
-            - 新增：顶部状态卡片（账号总数 / ZCode 状态 / 可领取 / 额度告急）
-            - 新增：账号卡片一键复制 API Key / JWT / 邮箱 / 用户 ID，国内版/国际版标签
-            - 界面改为浅色青绿主题
-            - 新增设置「启动时刷新全部账号」（默认关闭，不再启动即刷新全部）
+            - 新增账号卡片「复制到 Magpie」按钮，一次复制站点、账号名称、API Key、JWT 和已有设备标识。
+            - 配套 Magpie 插件自动识别完整账号信息，无需重复选择站点、填写备注或分别复制两种凭据。
+            - 同时支持付费 GLM Coding Plan 与 ZCode Start Plan／赠送额度；已过期的 JWT 不影响仍可用的付费 key。
+            - 补充导出／导入格式说明和两端兼容性测试，修复中英文检查对动态主题键的误报。
+
+            ## 接入 Magpie
+            1. 下载本页附件 `magpie-zcode-switch-auth-0.3.0.zip`，更新／安装配套插件。
+            2. 在 zcode-switch-plus 目标账号卡片点击「复制到 Magpie」。
+            3. 在 Magpie 添加 ZCode 账号，选择 `Switch Plus: Import account`，粘贴完整内容即可。
 
             ## 下载
-            - **Windows**：`*_x64-setup.exe` 安装包（推荐）／`*_portable.exe` 便携版
+            - **Windows**：`*_x64-setup.exe` 安装包／`*_portable.exe` 便携版
             - **macOS**：`*_aarch64.dmg`（Apple 芯片）／`*_x64.dmg`（Intel 芯片）
             - **Linux**：`*.deb`／`*.AppImage`
+            - **Magpie 插件**：`magpie-zcode-switch-auth-0.3.0.zip`
 
             未签名：Windows SmartScreen 选「更多信息 → 仍要运行」；macOS 右键打开。
           releaseDraft: false

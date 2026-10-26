@@ -466,8 +466,13 @@ const actions = {
       try { await navigator.clipboard.writeText(text); }
       catch {
         const ta = document.createElement("textarea");
-        ta.value = text; document.body.appendChild(ta); ta.select();
-        document.execCommand("copy"); ta.remove();
+        ta.value = text; ta.readOnly = true;
+        ta.style.position = "fixed"; ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        try {
+          ta.focus(); ta.select();
+          if (!document.execCommand("copy")) throw new Error(t("m.copyFailed"));
+        } finally { ta.remove(); }
       }
       toast(t("m.copied", { what: t(`btn.copy.${kind}`) }), "ok");
     } catch (e) { toast(stripErr(e), "err"); }
@@ -887,6 +892,7 @@ function render() {
           <div class="row-name"><span class="row-name-text" title="${esc(a.name)}">${esc(a.name)}</span>${provTag(a)}${tierBadgeFor(a.id)}${isActive ? `<span class="tag-use">${t("btn.inUse")}</span>` : ""}${a.has_user_info === false ? `<span class="tag-relogin" title="${esc(t("btn.reloginTitle"))}">${t("btn.relogin")}</span>` : ""}${a.jwt_expired ? `<span class="tag-relogin" title="${esc(t("btn.jwtExpiredTitle"))}">${t("btn.jwtExpired")}</span>` : ""}</div>
           <div class="row-meta">${meta}</div>
           <div class="copy-row">
+            <button type="button" class="copy-chip" title="${esc(t("btn.copy.magpieTitle"))}" click="actions.copy('${a.id}','magpie')">${ic("copy", 12)} ${t("btn.copy.magpie")}</button>
             <span class="copy-chip" click="actions.copy('${a.id}','apikey')">${ic("copy", 12)} ${t("btn.copy.apikey")}</span>
             <span class="copy-chip" click="actions.copy('${a.id}','jwt')">${ic("copy", 12)} ${t("btn.copy.jwt")}</span>
             ${a.identity?.email ? `<span class="copy-chip" click="actions.copy('${a.id}','email')">${ic("copy", 12)} ${t("btn.copy.email")}</span>` : ""}

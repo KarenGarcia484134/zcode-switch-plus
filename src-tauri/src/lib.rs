@@ -9,6 +9,7 @@ mod probe;
 mod quota;
 mod store;
 mod zcrypto;
+mod magpie;
 
 use serde_json::{json, Value};
 use std::sync::Mutex;

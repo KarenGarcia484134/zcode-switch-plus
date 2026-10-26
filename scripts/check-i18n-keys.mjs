@@ -23,9 +23,11 @@ const DYNAMIC = [
   "q.win.daily", "q.win.weekly", "q.win.monthly", "q.win.cycle",
   "prov.bigmodel", "prov.zai",
   "m.bitProbeNoPlan", "m.bitProbeAuthFailed",
+  "theme.system", "theme.light", "theme.dark",
+  "btn.copy.apikey", "btn.copy.jwt", "btn.copy.magpie", "btn.copy.email", "btn.copy.uid",
 ];
 
-const callRe = /\bt\(\s*(["'])((?:(?!\1).)+)\1/g; // 只匹配引号串；模板串走 DYNAMIC
+const callRe = /\bt\(\s*(["'])((?:(?!\1).)+)\1\s*(?=[,)])/g; // 完整字面量；拼接／模板串走 DYNAMIC
 const files = readdirSync(join(root, "src")).filter((f) => f.endsWith(".js"));
 for (const f of files) {
   const src = readFileSync(join(root, "src", f), "utf8");

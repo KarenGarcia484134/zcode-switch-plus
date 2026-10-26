@@ -1,0 +1,1 @@
+{"format":"zcode-switch-plus/magpie-account","version":1,"site":"zai","account":{"id":"source-account","name":"工作账号"},"credentials":{"apiKey":"paid.synthetic_secret","jwt":"eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjQxMDI0NDQ4MDB9.synthetic_signature"},"deviceId":"11111111-2222-4333-8444-555555555555"}

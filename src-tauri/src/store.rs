@@ -651,7 +651,7 @@ fn auto_preserve(paths: &Paths, accounts: &[Account], target_hash: &str) -> Resu
     Ok(Some(name))
 }
 
-fn cred_plain(creds: &Value, key: &str, home: &std::path::Path) -> Option<String> {
+pub(crate) fn cred_plain(creds: &Value, key: &str, home: &std::path::Path) -> Option<String> {
     let v = creds.get(key)?.as_str()?;
     if zcrypto::is_encrypted(v) {
         zcrypto::decrypt_with_secret(v, &zcrypto::default_secret(home)).ok()
@@ -1549,6 +1549,7 @@ pub fn get_state(paths: &Paths) -> Result<AppState, String> {
 pub fn account_secret(paths: &Paths, id: &str, kind: &str) -> Result<String, String> {
     let acc = load_account(paths, id)?;
     let out = match kind {
+        "magpie" => return crate::magpie::clipboard(&acc, &paths.home),
         "jwt" => cred_plain(&acc.credentials, "zcodejwttoken", &paths.home),
         "apikey" => acc.config.as_ref().and_then(|c| {
             let provs = c.get("provider")?.as_object()?;

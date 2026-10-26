@@ -60,6 +60,9 @@ pub fn init_from_settings(s: &crate::store::Settings) {
 }
 
 const ZH: &[(&str, &str)] = &[
+    ("err.magpie.site_unknown", "无法确定账号站点，请在 ZCode 登录该账号后重新保存登录"),
+    ("err.magpie.no_credentials", "没有可用的 API Key 或 JWT，请重新登录并保存该账号"),
+    ("err.magpie.serialize", "生成 Magpie 账号信息失败"),
     ("err.write", "写入失败：{e}"),
     ("err.write_file", "写入失败 {path}: {e}"),
     ("err.rename_fail", "落盘失败 {path}: {e}"),
@@ -222,6 +225,9 @@ const ZH: &[(&str, &str)] = &[
 ];
 
 const EN: &[(&str, &str)] = &[
+    ("err.magpie.site_unknown", "Cannot determine the account site; sign in to this account in ZCode and save it again"),
+    ("err.magpie.no_credentials", "No usable API key or JWT; sign in and save this account again"),
+    ("err.magpie.serialize", "Could not create the Magpie account clipboard data"),
     ("err.write", "Write failed: {e}"),
     ("err.write_file", "Write failed {path}: {e}"),
     ("err.rename_fail", "Persist failed {path}: {e}"),
