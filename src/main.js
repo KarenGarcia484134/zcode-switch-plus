@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { esc, toast, openPwModal, openConfirmModal, openProviderModal, installDelegation, dismissSplash } from "./ui.js";
 import { ic } from "./icons.js";
+import { getThemePref, cycleTheme, onThemeChange } from "./theme.js";
 import { init, t, has, lang, localeTag, stripErr } from "./i18n.js";
 
 const $app = document.getElementById("app");
@@ -311,6 +312,12 @@ const actions = {
         }
       },
     });
+  },
+
+  cycleTheme() {
+    const next = cycleTheme();
+    toast(t("theme.title") + t("theme." + next), "ok");
+    if (!uiLocked()) render();
   },
 
   async claim(id) {
@@ -916,9 +923,12 @@ function render() {
   $app.innerHTML = `
     <header class="topbar">
       <div class="wordmark">Z·SWITCH${appVer ? ` <span class="ver">v${esc(appVer)}</span>` : ""}</div>
-      <div class="top-status${unsaved ? " unsaved" : ""}">
-        <span class="status-dot ${dotCls}"></span>
-        <span class="status-text">${esc(statusText)}</span>
+      <div class="top-right">
+        <div class="top-status${unsaved ? " unsaved" : ""}">
+          <span class="status-dot ${dotCls}"></span>
+          <span class="status-text">${esc(statusText)}</span>
+        </div>
+        <button class="icon-btn theme-btn" click="actions.cycleTheme()" title="${esc(t("theme.title") + t("theme." + getThemePref()))}" aria-label="${esc(t("theme.title"))}">${ic({ system: "monitor", light: "sun", dark: "moon" }[getThemePref()], 16)}</button>
       </div>
     </header>
 
@@ -1100,3 +1110,5 @@ async function sweepTick() {
     dismissSplash();
   }
 })();
+
+onThemeChange(() => { if (!uiLocked()) render(); });

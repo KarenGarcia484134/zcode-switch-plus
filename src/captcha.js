@@ -2,6 +2,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { init, t, lang, stripErr } from "./i18n.js";
+import { onThemeChange } from "./theme.js";
+onThemeChange();
 
 const SDK_URL = "https://o.alicdn.com/captcha-frontend/aliyunCaptcha/AliyunCaptcha.js";
 const TRACELESS_TIMEOUT = 8000;

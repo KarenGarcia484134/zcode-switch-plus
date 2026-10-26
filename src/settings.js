@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { esc, toast, openPwModal, installDelegation, dismissSplash } from "./ui.js";
 import { ic } from "./icons.js";
+import { getThemePref, setThemePref, onThemeChange } from "./theme.js";
 import { init, t, lang, stripErr } from "./i18n.js";
 
 const $app = document.getElementById("app");
@@ -29,6 +30,7 @@ async function guard(fn) {
 }
 
 const actions = {
+  setTheme(k) { setThemePref(k); render(); },
   async refresh() { await refresh(); render(); },
 
   async openGitHub() {
@@ -161,6 +163,14 @@ const langSeg = (cur) => `
     </div>
   </div>`;
 
+const themeSeg = (cur) => `
+  <div class="tog-row">
+    <div class="tog-info"><div class="tog-label">${t("theme.label")}</div></div>
+    <div class="lang-seg" role="radiogroup" aria-label="${t("theme.label")}">
+      ${["system", "light", "dark"].map((k) => `<button class="lang-opt${cur === k ? " on" : ""}" role="radio" aria-checked="${cur === k}" click="actions.setTheme('${k}')">${t("theme." + k)}</button>`).join("")}
+    </div>
+  </div>`;
+
 function render() {
   if (!state) {
     $app.innerHTML = `<div class="loading">LOADING</div>`;
@@ -174,6 +184,7 @@ function render() {
     </header>
     <section class="settings open">
       ${langSeg(s.language || "zh")}
+      ${themeSeg(getThemePref())}
       <label>BEHAVIOR · ${t("s.behaviorLabel")}</label>
       ${toggle(autostart, "actions.toggleAutostart()", t("s.autostart"), t("s.autostartDesc"))}
       ${toggle(s.launch_after_switch, "actions.toggleBehavior('launch')", t("s.launchAfter"), t("s.launchAfterDesc"))}
@@ -223,3 +234,5 @@ listen("state-changed", () => {
     dismissSplash();
   }
 })();
+
+onThemeChange(() => render());

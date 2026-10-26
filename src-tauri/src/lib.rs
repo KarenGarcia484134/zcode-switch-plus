@@ -557,15 +557,18 @@ async fn oauth_begin(app: AppHandle, provider: String) -> Result<serde_json::Val
         }
         // 窗口内「邮箱登录 / 邮箱注册」按钮会把用户带回官网入口页，此时重新武装接力：
         // 接力默认只有一次机会，手动绕回登录页后若不再武装，登录成功也不会取码
-        if url.host_str() == Some("chat.z.ai")
-            && url.path() == "/auth"
-            && url.query().map_or(false, |q| q.contains("client_id="))
+        // 只有真正完成一次登录（官网回跳 /login/callback）才重新武装接力。
+        // 旧逻辑在 chat.z.ai/auth?client_id= 上重新武装：授权端点因会话未生效 307 回 /auth 时
+        // 会立刻再武装 → 再接力 → 再 307……形成无限刷新循环，用户也无法再次登录。
+        if url.host_str().map_or(false, |h| h == "z.ai" || h.ends_with(".z.ai"))
+            && url.path().starts_with("/login/callback")
         {
             relay_armed2.store(true, std::sync::atomic::Ordering::SeqCst);
         }
         // zai 第一段（官网登录页）完成 → 接力到本次 flow 的授权页取码（此时已登录，不再要求手机号）
         if url.host_str().map_or(false, |h| h == "z.ai" || h.ends_with(".z.ai"))
             && !is_login_page(url.path())
+            && !is_relay_passthrough(url.path())
             && relay_armed2.swap(false, std::sync::atomic::Ordering::SeqCst)
         {
             flowlog::log(
@@ -618,13 +621,17 @@ async fn oauth_begin(app: AppHandle, provider: String) -> Result<serde_json::Val
             while std::time::Instant::now() < deadline {
                 std::thread::sleep(std::time::Duration::from_millis(1000));
                 let ours = pending_oauth_guard().as_ref().map(|p| p.flow == guard_flow).unwrap_or(false);
-                if !ours || !armed.load(std::sync::atomic::Ordering::SeqCst) {
+                if !ours {
                     return;
+                }
+                if !armed.load(std::sync::atomic::Ordering::SeqCst) {
+                    stable = 0;
+                    continue; // 等用户重新登录（/login/callback 会重新武装）
                 }
                 let Some(w) = app_relay.get_webview_window("login") else { return };
                 let Ok(u) = w.url() else { continue };
                 let host = u.host_str().unwrap_or("");
-                if !(host == "z.ai" || host.ends_with(".z.ai")) || is_login_page(u.path()) {
+                if !(host == "z.ai" || host.ends_with(".z.ai")) || is_login_page(u.path()) || is_relay_passthrough(u.path()) {
                     stable = 0;
                     continue;
                 }
@@ -633,12 +640,12 @@ async fn oauth_begin(app: AppHandle, provider: String) -> Result<serde_json::Val
                 if stable < 2 {
                     continue;
                 }
+                stable = 0;
                 if !armed.swap(false, std::sync::atomic::Ordering::SeqCst) {
-                    return; // 已被 on_navigation 那路接力
+                    continue; // 已被 on_navigation 那路接力
                 }
                 flowlog::log(&fl, "zai-relay", &format!("poll {host}{} -> authorize", u.path()));
                 relay_navigate(app_relay.clone(), fl.clone(), target.clone());
-                return;
             }
         });
     }
@@ -683,6 +690,11 @@ fn log_after_relay(app: AppHandle, flow: String, delay_ms: u64) {
 }
 
 /// 登录 / 注册相关路径：说明还没登录完成，zai 接力不能在这些页面触发
+/// 授权端点 / 回调本身：接力的目标或中转页，不能再触发接力（否则自我循环）
+fn is_relay_passthrough(path: &str) -> bool {
+    path.starts_with("/api/oauth/") || path.starts_with("/api/v1/oauth/")
+}
+
 fn is_login_page(path: &str) -> bool {
     // 注意：/login/callback 是官网用 code 换会话 token、写 cookie 的回跳页，此时会话尚未落地。
     // 旧逻辑把它当成「已登录」立即接力，会打断回调 → 授权端点看不到会话又 307 回登录页，
