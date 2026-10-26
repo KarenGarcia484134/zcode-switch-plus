@@ -5329,7 +5329,7 @@ dependencies = [
 
 [[package]]
 name = "zcode-switch"
-version = "1.8.5"
+version = "1.8.6"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
