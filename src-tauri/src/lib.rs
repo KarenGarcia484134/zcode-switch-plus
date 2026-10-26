@@ -448,7 +448,7 @@ async fn oauth_begin(app: AppHandle, provider: String) -> Result<serde_json::Val
         let srv_flow = init.poll_url.rsplit('/').next().unwrap_or("");
         let expires_in = init.expires_at_ms.saturating_sub(now) / 1000;
         let authorize = init.authorize_url.split('?').next().unwrap_or("");
-        let mode = if provider == "zai" { "official-login+relay" } else { "direct" };
+        let mode = if provider == "zai" { "authorize-direct" } else { "direct" };
         flowlog::log(
             &flow,
             "init-ok",
@@ -459,8 +459,10 @@ async fn oauth_begin(app: AppHandle, provider: String) -> Result<serde_json::Val
     let url = init.raw_authorize_url.clone();
     // zai：API 授权 client 没有邮箱入口，先用官网登录页建立 chat.z.ai 会话，
     // 登录完成后再接力到这个授权端点取码（已登录 → 不再要求手机号）
+    // zai：直接打开本次 flow 的授权登录页（zcode client 的 /auth），在这里登录一次即直接发码回调，
+    // 无需二次登录。若该页只有手机号，注入的「邮箱登录」按钮会转到官网入口，登录完成后再接力一次。
     let entry_url = if provider == "zai" {
-        oauth::ZAI_LOGIN_ENTRY_URL.to_string()
+        init.authorize_url.clone()
     } else {
         url.clone()
     };
@@ -489,7 +491,8 @@ async fn oauth_begin(app: AppHandle, provider: String) -> Result<serde_json::Val
     let flow_close = flow.clone();
     let relay_to = url.clone();
     let relay_to2 = url.clone();
-    let relay_armed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(provider == "zai"));
+    // 只在官网入口登录回跳（/login/callback）后才武装接力，入口页本身不接力
+    let relay_armed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let relay_armed2 = relay_armed.clone();
     let relay_armed3 = relay_armed.clone();
     let flow_relay = flow.clone();
@@ -653,27 +656,16 @@ async fn oauth_begin(app: AppHandle, provider: String) -> Result<serde_json::Val
     Ok(json!({ "opened": true, "provider": provider }))
 }
 
-/// 接力到授权端点；若会话尚未生效被弹回登录页，则稍等后自动重试（最多 3 次），
-/// 而不是让用户再登录一遍。
+/// 接力到授权端点：每次登录成功只导航一次，绝不定时重试/刷新——
+/// 若被弹回登录页，用户可从容在页面上再登录，不会被打断。
 fn relay_navigate(app: AppHandle, flow: String, target: String) {
-    std::thread::spawn(move || {
-        for attempt in 0..3u32 {
-            let ours = pending_oauth_guard().as_ref().map(|p| p.flow == flow).unwrap_or(false);
-            if !ours { return; }
-            let Some(w) = app.get_webview_window("login") else { return };
-            if let Ok(t) = target.parse::<tauri::Url>() {
-                let _ = w.navigate(t);
-            }
-            std::thread::sleep(std::time::Duration::from_millis(5000));
-            let ours = pending_oauth_guard().as_ref().map(|p| p.flow == flow).unwrap_or(false);
-            if !ours { return; }
-            let Some(w) = app.get_webview_window("login") else { return };
-            let Ok(u) = w.url() else { return };
-            flowlog::log(&flow, "zai-after", &format!("try{} {}{}", attempt + 1, u.host_str().unwrap_or(""), u.path()));
-            if !is_login_page(u.path()) { return; }
-            std::thread::sleep(std::time::Duration::from_millis(2000));
-        }
-    });
+    let ours = pending_oauth_guard().as_ref().map(|p| p.flow == flow).unwrap_or(false);
+    if !ours { return; }
+    let Some(w) = app.get_webview_window("login") else { return };
+    if let Ok(t) = target.parse::<tauri::Url>() {
+        let _ = w.navigate(t);
+    }
+    log_after_relay(app, flow, 5000);
 }
 
 #[allow(dead_code)]
