@@ -1112,8 +1112,8 @@ async fn open_settings(app: AppHandle) -> Result<(), String> {
     .inner_size(w, h)
     .min_inner_size(440.0, 540.0)
     .resizable(true)
-    .visible(false);
-    let win = net::webview(win, "settings")
+    .additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --no-proxy-server")
+    .visible(false)
     .build()
     .map_err(|e| e.to_string())?;
     center_over_main(&app, &win, w, h);
@@ -1386,17 +1386,6 @@ pub fn run() {
             i18n::init_from_settings(&store::load_settings(&Paths::detect()));
             if let Ok(data_dir) = app.path().app_local_data_dir() {
                 flowlog::init(&data_dir);
-            }
-            {
-                let b = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
-                    .title("Z·SWITCH")
-                    .inner_size(680.0, 820.0)
-                    .min_inner_size(520.0, 640.0)
-                    .resizable(true)
-                    .center()
-                    .theme(Some(tauri::Theme::Light))
-                    .background_color(tauri::window::Color(10, 10, 12, 255));
-                net::webview(b, "main").build()?;
             }
             let _tray = TrayIconBuilder::with_id(TRAY_ID)
                 .icon(app.default_window_icon().expect("no window icon").clone())

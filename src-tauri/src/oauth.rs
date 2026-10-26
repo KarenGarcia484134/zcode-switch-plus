@@ -195,7 +195,7 @@ pub fn init_flow(provider: &str, mid: &str) -> Result<FlowInit, String> {
 
 fn init_flow_at(url: &str, provider: &str, mid: &str) -> Result<FlowInit, String> {
     let poll_token = new_poll_token();
-    let agent = crate::net::agent_builder("oauth")
+    let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
         .timeout(Duration::from_secs(20))
         .build();
@@ -491,7 +491,7 @@ pub fn parse_proxy_url(input: &str) -> Result<String, String> {
 }
 
 pub fn exchange_token(provider: &str, code: &str, state: &str, mid: &str) -> Result<Value, String> {
-    let agent = crate::net::agent_builder("oauth")
+    let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
         .timeout(Duration::from_secs(20))
         .build();
@@ -651,7 +651,7 @@ pub const START_PLAN_ANTHROPIC_BASE: &str = "https://zcode.z.ai/api/v1/zcode-pla
 const API_KEY_NAME: &str = "zcode-api-key";
 
 fn web_agent() -> ureq::Agent {
-    crate::net::agent_builder("oauth")
+    ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
         .timeout(Duration::from_secs(15))
         .build()

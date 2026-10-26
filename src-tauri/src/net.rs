@@ -42,11 +42,7 @@ pub fn webview<'a, R: tauri::Runtime, M: tauri::Manager<R>>(
     b: tauri::WebviewWindowBuilder<'a, R, M>,
     tag: &str,
 ) -> tauri::WebviewWindowBuilder<'a, R, M> {
-    // Windows/WebView2: windows sharing the default profile must use identical
-    // browser args, so the decision is fixed at startup (restart to apply changes).
-    static STARTUP: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
-    let cached = STARTUP.get_or_init(proxy_url).clone();
-    match cached.and_then(|u| tauri::Url::parse(&u).ok()) {
+    match proxy_url().and_then(|u| tauri::Url::parse(&u).ok()) {
         Some(u) => {
             eprintln!("[zcs] {tag} webview: proxy=on ({u})");
             b.additional_browser_args(BROWSER_ARGS).proxy_url(u)
